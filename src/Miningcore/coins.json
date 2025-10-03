@@ -1657,6 +1657,56 @@
         "explorerTxLink": "https://chainz.cryptoid.info/lana/tx.dws?{0}.htm",
         "explorerAccountLink": "https://chainz.cryptoid.info/lana/address.dws?{0}.htm"
     },
+    "lazysloth": {
+    "name": "LazySloth",
+    "canonicalName": "LazySloth",
+    "symbol": "LZSL",
+    "family": "bitcoin",
+    "website": "https://lazyslothcoin.org/",
+    "github": "https://github.com/LazySlothOfficial/Source",
+    "market": "",
+    "twitter": "",
+    "telegram": "",
+    "discord": "",
+    "coinbaseHasher": {
+        "hash": "sha256d"
+    },
+    "headerHasher": {
+        "hash": "scrypt",
+        "args": [
+            1024,
+            1
+        ]
+    },
+    "blockHasher": {
+        "hash": "reverse",
+        "args": [
+            {
+                "hash": "sha256d"
+            }
+        ]
+    },
+    "posBlockHasher": {
+        "hash": "reverse",
+        "args": [
+            {
+                "hash": "scrypt",
+                "args": [
+                    1024,
+                    1
+                ]
+            }
+        ]
+    },
+    "hasMWEB": true,
+    "shareMultiplier": 65536,
+    "explorerBlockLink": "http://explorer.lazyslothcoin.org/block/{0}",
+    "explorerTxLink": "http://explorer.lazyslothcoin.org/tx/{0}",
+    "explorerAccountLink": "http://explorer.lazyslothcoin.org/address/{0}",
+    "gbtArgs": {
+        "rules": [ "segwit", "mweb" ]
+    }
+},
     "levocoin": {
         "name": "Levocoin",
         "symbol": "LEVO",
