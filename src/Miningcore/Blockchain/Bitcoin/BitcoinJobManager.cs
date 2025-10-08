@@ -64,29 +64,44 @@ public class BitcoinJobManager : BitcoinJobManagerBase<BitcoinJob>
 
         do
         {
-            var response = await rpc.ExecuteAsync<BlockTemplate>(logger,
-                BitcoinCommands.GetBlockTemplate, ct, GetBlockTemplateParams());
+            var response = await rpc.ExecuteAsync<BlockchainInfo>(logger,
+                BitcoinCommands.GetBlockchainInfo, ct);
 
-            var isSynched = response.Error == null;
+            var isSynched = false;
 
-            if(isSynched)
+            if (response.Error == null)
             {
-                logger.Info(() => "All daemons synched with blockchain");
-                break;
+                var info = response.Response;
+
+                if (info.InitialBlockDownload.HasValue)
+                {
+                    isSynched = !info.InitialBlockDownload.Value;
+                }
+                else if (info.VerificationProgress.HasValue && info.VerificationProgress.Value >= 0.999)
+                {
+                    logger.Info(() => $"Daemon does not report 'initialblockdownload' but verificationprogress={info.VerificationProgress.Value:F3}. Assuming fully synced.");
+                    isSynched = true;
+                }
             }
             else
             {
                 logger.Debug(() => $"Daemon reports error: {response.Error?.Message}");
             }
 
-            if(!syncPendingNotificationShown)
+            if (isSynched)
+            {
+                logger.Info(() => "All daemons synched with blockchain");
+                break;
+            }
+
+            if (!syncPendingNotificationShown)
             {
                 logger.Info(() => "Daemon is still syncing with network. Manager will be started once synced.");
                 syncPendingNotificationShown = true;
             }
 
             await ShowDaemonSyncProgressAsync(ct);
-        } while(await timer.WaitForNextTickAsync(ct));
+        } while (await timer.WaitForNextTickAsync(ct));
     }
 
     protected async Task<RpcResponse<BlockTemplate>> GetBlockTemplateAsync(CancellationToken ct)
