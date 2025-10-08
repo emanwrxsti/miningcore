@@ -59,7 +59,8 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
         {
             new
             {
-                rules = new[] {"segwit"},
+                // Enable both SegWit and MimbleWimble Extension Blocks
+                rules = new[] { "segwit", "mweb" },
             }
         };
     }
@@ -97,8 +98,6 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
                     {
                         using(msg)
                         {
-                            // We just take the second frame's raw data and turn it into a hex string.
-                            // If that string changes, we got an update (DistinctUntilChanged)
                             var result = msg[1].Read().ToHexString();
                             return result;
                         }
@@ -118,7 +117,6 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
 
             if(poolConfig.BlockRefreshInterval > 0)
             {
-                // periodically update block-template
                 var pollingInterval = poolConfig.BlockRefreshInterval > 0 ? poolConfig.BlockRefreshInterval : 1000;
 
                 triggers.Add(Observable.Timer(TimeSpan.FromMilliseconds(pollingInterval))
@@ -129,13 +127,11 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
 
             else
             {
-                // get initial blocktemplate
                 triggers.Add(Observable.Interval(TimeSpan.FromMilliseconds(1000))
                     .Select(_ => (false, JobRefreshBy.Initial, (string) null))
                     .TakeWhile(_ => !hasInitialBlockTemplate));
             }
 
-            // periodically update transactions for current template
             if(poolConfig.JobRebroadcastTimeout > 0)
             {
                 triggers.Add(Observable.Timer(jobRebroadcastTimeout)
@@ -171,7 +167,6 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
                     .RefCount());
             }
 
-            // get initial blocktemplate
             triggers.Add(Observable.Interval(TimeSpan.FromMilliseconds(1000))
                 .Select(_ => (false, JobRefreshBy.Initial, (string) null))
                 .TakeWhile(_ => !hasInitialBlockTemplate));
@@ -207,12 +202,9 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
 
             if(blockCount.HasValue)
             {
-                // get list of peers and their highest block height to compare to ours
                 var peerInfo = await rpc.ExecuteAsync<PeerInfo[]>(logger, BitcoinCommands.GetPeerInfo, ct);
                 var peers = peerInfo.Response;
-
                 var totalBlocks = Math.Max(info.Response.Headers, peers.Any() ? peers.Max(y => y.StartingHeight) : 0);
-
                 var percent = totalBlocks > 0 ? (double) blockCount / totalBlocks * 100 : 0;
                 logger.Info(() => $"Daemon has downloaded {percent:0.00}% of blockchain from {peers.Length} peers");
             }
@@ -232,7 +224,6 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
             if(results.Any(x => x.Error != null))
             {
                 var errors = results.Where(x => x.Error != null).ToArray();
-
                 if(errors.Any())
                     logger.Warn(() => $"Error(s) refreshing network stats: {string.Join(", ", errors.Select(y => y.Error.Message))}");
             }
@@ -243,7 +234,6 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
             BlockchainStats.NetworkHashrate = miningInfoResponse.NetworkHashps;
             BlockchainStats.ConnectedPeers = networkInfoResponse.Connections;
 
-            // Fall back to alternative RPC if coin does not report Network HPS (Digibyte)
             if(BlockchainStats.NetworkHashrate == 0 && results[2].Error == null)
                 BlockchainStats.NetworkHashrate = results[2].Response.Value<double>();
         }
@@ -262,15 +252,13 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
             ? new RpcRequest(BitcoinCommands.SubmitBlock, new[] { blockHex })
             : new RpcRequest(BitcoinCommands.GetBlockTemplate, new { mode = "submit", data = blockHex });
 
-        var batch = new []
+        var batch = new[]
         {
             submitBlockRequest,
             new RpcRequest(BitcoinCommands.GetBlock, new[] { share.BlockHash })
         };
 
         var results = await rpc.ExecuteBatchAsync(logger, ct, batch);
-
-        // did submission succeed?
         var submitResult = results[0];
         var submitError = submitResult.Error?.Message ??
             submitResult.Error?.Code.ToString(CultureInfo.InvariantCulture) ??
@@ -279,11 +267,11 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
         if(!string.IsNullOrEmpty(submitError))
         {
             logger.Warn(() => $"Block {share.BlockHeight} submission failed with: {submitError}");
-            messageBus.SendMessage(new AdminNotification("Block submission failed", $"Pool {poolConfig.Id} {(!string.IsNullOrEmpty(share.Source) ? $"[{share.Source.ToUpper()}] " : string.Empty)}failed to submit block {share.BlockHeight}: {submitError}"));
+            messageBus.SendMessage(new AdminNotification("Block submission failed",
+                $"Pool {poolConfig.Id} {(!string.IsNullOrEmpty(share.Source) ? $"[{share.Source.ToUpper()}] " : string.Empty)}failed to submit block {share.BlockHeight}: {submitError}"));
             return new SubmitResult(false, null);
         }
 
-        // was it accepted?
         var acceptResult = results[1];
         var block = acceptResult.Response?.ToObject<DaemonResponses.Block>();
         var accepted = acceptResult.Error == null && block?.Hash == share.BlockHash;
@@ -291,7 +279,8 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
         if(!accepted)
         {
             logger.Warn(() => $"Block {share.BlockHeight} submission failed for pool {poolConfig.Id} because block was not found after submission");
-            messageBus.SendMessage(new AdminNotification($"[{poolConfig.Id}]-[{(!string.IsNullOrEmpty(share.Source) ? $"[{share.Source.ToUpper()}] " : string.Empty)}] Block submission failed", $"[{poolConfig.Id}]-[{(!string.IsNullOrEmpty(share.Source) ? $"[{share.Source.ToUpper()}] " : string.Empty)}] Block {share.BlockHeight} submission failed for pool {poolConfig.Id} because block was not found after submission"));
+            messageBus.SendMessage(new AdminNotification($"[{poolConfig.Id}] Block submission failed",
+                $"[{poolConfig.Id}] Block {share.BlockHeight} submission failed for pool {poolConfig.Id} because block was not found after submission"));
         }
 
         return new SubmitResult(accepted, block?.Transactions.FirstOrDefault());
@@ -300,18 +289,14 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
     protected async Task<bool> AreDaemonsHealthyLegacyAsync(CancellationToken ct)
     {
         var response = await rpc.ExecuteAsync<DaemonInfo>(logger, BitcoinCommands.GetInfo, ct);
-
         return response.Error == null;
     }
 
     protected async Task<bool> AreDaemonsConnectedLegacyAsync(CancellationToken ct)
     {
         var response = await rpc.ExecuteAsync<DaemonInfo>(logger, BitcoinCommands.GetInfo, ct);
-        
-        // update stats
         if(!string.IsNullOrEmpty(response.Response.Version))
             BlockchainStats.NodeVersion = (string) response.Response.Version;
-
         return response.Error == null && response.Response.Connections > 0;
     }
 
@@ -322,13 +307,10 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
         if(info != null)
         {
             var blockCount = info.Response?.Blocks;
-
             if(blockCount.HasValue)
             {
-                // get list of peers and their highest block height to compare to ours
                 var peerInfo = await rpc.ExecuteAsync<PeerInfo[]>(logger, BitcoinCommands.GetPeerInfo, ct);
                 var peers = peerInfo.Response;
-
                 if(peers != null && peers.Length > 0)
                 {
                     var totalBlocks = peers.Max(x => x.StartingHeight);
@@ -344,21 +326,17 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
         try
         {
             var results = await rpc.ExecuteBatchAsync(logger, ct,
-                new RpcRequest(BitcoinCommands.GetConnectionCount)
-            );
+                new RpcRequest(BitcoinCommands.GetConnectionCount));
 
             if(results.Any(x => x.Error != null))
             {
                 var errors = results.Where(x => x.Error != null).ToArray();
-
                 if(errors.Any())
                     logger.Warn(() => $"Error(s) refreshing network stats: {string.Join(", ", errors.Select(y => y.Error.Message))}");
             }
 
             var connectionCountResponse = results[0].Response.ToObject<object>();
-
-            //BlockchainStats.NetworkHashrate = miningInfoResponse.NetworkHashps;
-            BlockchainStats.ConnectedPeers = (int) (long) connectionCountResponse!;
+            BlockchainStats.ConnectedPeers = (int)(long)connectionCountResponse!;
         }
 
         catch(Exception e)
@@ -374,7 +352,6 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
     protected override void ConfigureDaemons()
     {
         var jsonSerializerSettings = ctx.Resolve<JsonSerializerSettings>();
-
         rpc = new RpcClient(poolConfig.Daemons.First(), jsonSerializerSettings, messageBus, poolConfig.Id);
     }
 
@@ -384,7 +361,6 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
             return await AreDaemonsHealthyLegacyAsync(ct);
 
         var response = await rpc.ExecuteAsync<BlockchainInfo>(logger, BitcoinCommands.GetBlockchainInfo, ct);
-
         if(response.Error != null)
         {
             logger.Error(() => $"Daemon reports: {response.Error.Message}");
@@ -399,10 +375,8 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
             return await AreDaemonsConnectedLegacyAsync(ct);
 
         var response = await rpc.ExecuteAsync<NetworkInfo>(logger, BitcoinCommands.GetNetworkInfo, ct);
-
-        // update stats
         if(!string.IsNullOrEmpty(response.Response.Version))
-            BlockchainStats.NodeVersion = (string) response.Response?.Version;
+            BlockchainStats.NodeVersion = (string)response.Response?.Version;
 
         return response.Error == null && response.Response?.Connections > 0;
     }
@@ -410,7 +384,6 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
     protected override async Task EnsureDaemonsSynchedAsync(CancellationToken ct)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
-
         var syncPendingNotificationShown = false;
 
         do
@@ -448,10 +421,8 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
         };
 
         var responses = await rpc.ExecuteBatchAsync(logger, ct, requests);
-
         if(responses.Any(x => x.Error != null))
         {
-            // filter out optional RPCs
             var errors = responses
                 .Where((x, i) => x.Error != null &&
                     requests[i].Method != BitcoinCommands.SubmitBlock &&
@@ -462,7 +433,6 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
                 throw new PoolStartupException($"Init RPC failed: {string.Join(", ", errors.Select(y => y.Error.Message))}", poolConfig.Id);
         }
 
-        // extract results
         var validateAddressResponse = responses[0].Error == null ? responses[0].Response.ToObject<ValidateAddressResponse>() : null;
         var submitBlockResponse = responses[1];
         var blockchainInfoResponse = !hasLegacyDaemon ? responses[2].Response.ToObject<BlockchainInfo>() : null;
@@ -470,30 +440,22 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
         var difficultyResponse = responses[3].Response.ToObject<JToken>();
         var addressInfoResponse = responses[4].Error == null ? responses[4].Response.ToObject<AddressInfo>() : null;
 
-        // chain detection
         if(!hasLegacyDaemon)
         {
-            // annoying special cases
             switch(blockchainInfoResponse.Chain.ToLower())
             {
-                // mainnet
                 case "nexa":
                 case "scash":
                     network = Network.Main;
                     break;
-
-                // testnet
                 case "nexatest":
                 case "scashtestnet":
                     network = Network.TestNet;
                     break;
-
-                // regtest
                 case "nexareg":
                 case "scashregtest":
                     network = Network.RegTest;
                     break;
-
                 default:
                     network = Network.GetNetwork(blockchainInfoResponse.Chain.ToLower());
                     break;
@@ -502,43 +464,61 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
         else
             network = daemonInfoResponse.Testnet ? Network.TestNet : Network.Main;
 
-        // ensure pool owns wallet
-        if(validateAddressResponse is not {IsValid: true})
+        if(validateAddressResponse is not { IsValid: true })
             throw new PoolStartupException($"Daemon reports pool-address '{poolConfig.Address}' as invalid", poolConfig.Id);
 
-        isPoS = poolConfig.Template is BitcoinTemplate {IsPseudoPoS: true} ||
-            (difficultyResponse.Values().Any(x => x.Path == "proof-of-stake" && !difficultyResponse.Values().Any(x => x.Path == "proof-of-work")));
-        
-        forcePoolAddressDestinationWithPubKey = poolConfig.Template is BitcoinTemplate {ForcePoolAddressDestinationWithPubKey: true};
+        // Smart PoW/PoS detection
+        bool hasPoW = false;
+        bool hasPoSFlag = false;
 
-        // Create pool address script from response
+        if(difficultyResponse.Type == JTokenType.Object)
+        {
+            var powToken = difficultyResponse["proof-of-work"];
+            var posToken = difficultyResponse["proof-of-stake"];
+
+            if(powToken != null && double.TryParse(powToken.ToString(), out var powVal) && powVal > 0)
+                hasPoW = true;
+
+            if(posToken != null && double.TryParse(posToken.ToString(), out var posVal) && posVal > 0)
+                hasPoSFlag = true;
+        }
+
+        if(hasPoW && !hasPoSFlag)
+            isPoS = false;
+        else if(!hasPoW && hasPoSFlag)
+            isPoS = true;
+        else if(hasPoW && hasPoSFlag)
+        {
+            isPoS = false;
+            logger.Info(() => $"[SmartDetect] Both PoW and PoS detected — defaulting to Proof-of-Work for {poolConfig.Id}");
+        }
+        else
+            isPoS = poolConfig.Template is BitcoinTemplate { IsPseudoPoS: true };
+
+        forcePoolAddressDestinationWithPubKey = poolConfig.Template is BitcoinTemplate { ForcePoolAddressDestinationWithPubKey: true };
+
         if(!isPoS && !forcePoolAddressDestinationWithPubKey)
         {
             if(extraPoolConfig != null && extraPoolConfig.AddressType != BitcoinAddressType.Legacy)
-                logger.Info(()=> $"Interpreting pool address {poolConfig.Address} as type {extraPoolConfig?.AddressType.ToString()}");
+                logger.Info(() => $"Interpreting pool address {poolConfig.Address} as type {extraPoolConfig?.AddressType.ToString()}");
 
             poolAddressDestination = AddressToDestination(poolConfig.Address, extraPoolConfig?.AddressType);
         }
-
         else
         {
-            logger.Info(()=> $"Interpreting pool address {poolConfig.Address} as raw public key");
+            logger.Info(() => $"Interpreting pool address {poolConfig.Address} as raw public key");
             poolAddressDestination = new PubKey(poolConfig.PubKey ?? validateAddressResponse.PubKey);
         }
 
-        // Payment-processing setup
         if(clusterConfig.PaymentProcessing?.Enabled == true && poolConfig.PaymentProcessing?.Enabled == true)
         {
-            // ensure pool owns wallet
-            if(validateAddressResponse is {IsMine: false} && addressInfoResponse is {IsMine: false})
-                logger.Warn(()=> $"Daemon does not own pool-address '{poolConfig.Address}'");
+            if(validateAddressResponse is { IsMine: false } && addressInfoResponse is { IsMine: false })
+                logger.Warn(() => $"Daemon does not own pool-address '{poolConfig.Address}'");
         }
 
-        // update stats
         BlockchainStats.NetworkType = network.Name;
         BlockchainStats.RewardType = isPoS ? "POS" : "POW";
 
-        // block submission RPC method
         if(submitBlockResponse.Error?.Message?.ToLower() == "method not found")
             hasSubmitBlockMethod = false;
         else if(submitBlockResponse.Error?.Code == (int)BitcoinRPCErrorCode.RPC_MISC_ERROR || submitBlockResponse.Error?.Code == (int)BitcoinRPCErrorCode.RPC_INVALID_PARAMS)
@@ -551,16 +531,14 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
         else
             await UpdateNetworkStatsLegacyAsync(ct);
 
-        // Periodically update network stats
         Observable.Interval(TimeSpan.FromMinutes(10))
             .Select(_ => Observable.FromAsync(() =>
-                Guard(()=> !hasLegacyDaemon ? UpdateNetworkStatsAsync(ct) : UpdateNetworkStatsLegacyAsync(ct),
+                Guard(() => !hasLegacyDaemon ? UpdateNetworkStatsAsync(ct) : UpdateNetworkStatsLegacyAsync(ct),
                     ex => logger.Error(ex))))
             .Concat()
             .Subscribe();
 
         PostChainIdentifyConfigure();
-
         SetupCrypto();
         SetupJobUpdates(ct);
     }
@@ -574,13 +552,10 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
         {
             case BitcoinAddressType.BechSegwit:
                 return BitcoinUtils.BechSegwitAddressToDestination(poolConfig.Address, network, extraPoolConfig?.BechPrefix);
-
             case BitcoinAddressType.BCash:
                 return BitcoinUtils.BCashAddressToDestination(poolConfig.Address, network);
-
             case BitcoinAddressType.Litecoin:
                 return BitcoinUtils.LitecoinAddressToDestination(poolConfig.Address, network);
-
             default:
                 return BitcoinUtils.AddressToDestination(poolConfig.Address, network);
         }
@@ -588,7 +563,6 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
 
     protected void SetupCrypto()
     {
-
     }
 
     protected abstract Task<(bool IsNew, bool Force)> UpdateJob(CancellationToken ct, bool forceUpdate, string via = null, string json = null);
@@ -619,8 +593,7 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
             return false;
 
         var result = await rpc.ExecuteAsync<ValidateAddressResponse>(logger, BitcoinCommands.ValidateAddress, ct, new[] { address });
-
-        return result.Response is {IsValid: true};
+        return result.Response is { IsValid: true };
     }
 
     #endregion // API-Surface
