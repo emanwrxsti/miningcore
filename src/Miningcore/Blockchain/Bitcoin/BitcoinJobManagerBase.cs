@@ -276,6 +276,27 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
         var block = acceptResult.Response?.ToObject<DaemonResponses.Block>();
         var accepted = acceptResult.Error == null && block?.Hash == share.BlockHash;
 
+        if(!accepted && acceptResult.Error?.Message?.ToLower().Contains("block not found") == true)
+        {
+            logger.Info(() => $"Block {share.BlockHeight} not found after submission, retrying after 3 seconds");
+            await Task.Delay(TimeSpan.FromSeconds(3), ct);
+
+            var retryResult = await rpc.ExecuteAsync<DaemonResponses.Block>(logger, BitcoinCommands.GetBlock, ct, new[] { share.BlockHash });
+            block = retryResult.Response;
+            accepted = retryResult.Error == null && block?.Hash == share.BlockHash;
+
+            if(accepted)
+            {
+                logger.Info(() => $"Block {share.BlockHeight} accepted on retry");
+            }
+            else
+            {
+                logger.Warn(() => $"Block {share.BlockHeight} still not found after retry");
+                messageBus.SendMessage(new AdminNotification($"[{poolConfig.Id}] Block submission failed",
+                    $"[{poolConfig.Id}] Block {share.BlockHeight} submission failed for pool {poolConfig.Id} because block was not found after retry"));
+            }
+        }
+
         if(!accepted)
         {
             logger.Warn(() => $"Block {share.BlockHeight} submission failed for pool {poolConfig.Id} because block was not found after submission");
