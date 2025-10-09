@@ -120,7 +120,6 @@ public class BitcoinJobManager : BitcoinJobManagerBase<BitcoinJob>
         }
     }
 
-    // --- FULL METHOD WITH BEDROCK FIX ---
     protected override async Task<(bool IsNew, bool Force)> UpdateJob(CancellationToken ct, bool forceUpdate, string via = null, string json = null)
     {
         try
@@ -138,27 +137,6 @@ public class BitcoinJobManager : BitcoinJobManagerBase<BitcoinJob>
                 logger.Warn(() => $"Unable to update job. Daemon responded with: {response.Error.Message} Code {response.Error.Code}");
                 return (false, forceUpdate);
             }
-
-            // --- BedrockCoin hybrid difficulty patch ---
-            try
-            {
-                if (poolConfig?.Coin?.Equals("bedrockcoin", StringComparison.OrdinalIgnoreCase) == true)
-                {
-                    var info = await daemon.ExecuteCmdAnyAsync<JObject>(logger, BitcoinCommands.GetMiningInfo, ct);
-
-                    if (info?["difficulty"]?.Type == JTokenType.Object)
-                    {
-                        var powDiff = info["difficulty"]["proof-of-work"]?.Value<double>() ?? 0d;
-                        info["difficulty"] = powDiff;
-                        logger.Info(() => $"[BedrockCoin] Adjusted hybrid difficulty to {powDiff}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.Warn(ex, () => "BedrockCoin difficulty patch failed (non-critical).");
-            }
-            // --- End patch ---
 
             var blockTemplate = response.Response;
             var job = currentJob;
