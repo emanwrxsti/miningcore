@@ -807,8 +807,21 @@ public class BitcoinJob
         if(nTime.Length != 8)
             throw new StratumException(StratumError.Other, "incorrect size of ntime");
         var nTimeInt = uint.Parse(nTime, NumberStyles.HexNumber);
-        if(nTimeInt < BlockTemplate.CurTime || nTimeInt > ((DateTimeOffset) clock.Now).ToUnixTimeSeconds() + 7200)
-            throw new StratumException(StratumError.Other, "ntime out of range");
+
+// Icminers fix for IceRiver miners - use MinTime instead of CurTime and extend tolerance
+var timeCompare = BlockTemplate.MinTime > 0 ? BlockTemplate.MinTime : BlockTemplate.CurTime;
+
+if(nTimeInt < timeCompare || nTimeInt > ((DateTimeOffset) clock.Now).ToUnixTimeSeconds() + 7200)
+{
+    logger?.Error(() => $"ERROR: nTime {nTimeInt} is out of range. " +
+                        $"JobId: {JobId}, " +
+                        $"nTime: {nTimeInt}, " +
+                        $"CurTime: {BlockTemplate.CurTime}, " +
+                        $"MinTime: {BlockTemplate.MinTime}, " +
+                        $"Now+7200: {((DateTimeOffset) clock.Now).ToUnixTimeSeconds() + 7200}");
+    throw new StratumException(StratumError.Other, "ntime out of range");
+}
+
         // validate nonce
         if(nonce.Length != 8)
             throw new StratumException(StratumError.Other, "incorrect size of nonce");
