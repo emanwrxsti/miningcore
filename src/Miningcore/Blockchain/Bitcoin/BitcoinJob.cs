@@ -804,24 +804,30 @@ public class BitcoinJob
         Contract.Requires<ArgumentException>(!string.IsNullOrEmpty(nonce));
         var context = worker.ContextAs<BitcoinWorkerContext>();
         // validate nTime
-        if(nTime.Length != 8)
-            throw new StratumException(StratumError.Other, "incorrect size of ntime");
-        var nTimeInt = uint.Parse(nTime, NumberStyles.HexNumber);
+if(nTime.Length != 8)
+    throw new StratumException(StratumError.Other, "incorrect size of ntime");
 
-// Icminers fix for IceRiver miners - use MinTime instead of CurTime and extend tolerance
-var timeCompare = BlockTemplate.MinTime > 0 ? BlockTemplate.MinTime : BlockTemplate.CurTime;
+var nTimeInt = uint.Parse(nTime, NumberStyles.HexNumber);
+
+// === Icminers Fix for IceRiver miners (compatible with older Miningcore builds) ===
+uint timeCompare = BlockTemplate.CurTime;
+try
+{
+    var minTimeProp = BlockTemplate.GetType().GetProperty("MinTime");
+    if(minTimeProp != null)
+    {
+        var minTimeValue = (uint)(minTimeProp.GetValue(BlockTemplate) ?? 0);
+        if(minTimeValue > 0)
+            timeCompare = minTimeValue;
+    }
+}
+catch { /* ignore if not present */ }
 
 if(nTimeInt < timeCompare || nTimeInt > ((DateTimeOffset) clock.Now).ToUnixTimeSeconds() + 7200)
 {
-    logger?.Error(() => $"ERROR: nTime {nTimeInt} is out of range. " +
-                        $"JobId: {JobId}, " +
-                        $"nTime: {nTimeInt}, " +
-                        $"CurTime: {BlockTemplate.CurTime}, " +
-                        $"MinTime: {BlockTemplate.MinTime}, " +
-                        $"Now+7200: {((DateTimeOffset) clock.Now).ToUnixTimeSeconds() + 7200}");
+    Console.WriteLine($"[WARN] Icminers nTime check: nTime={nTimeInt}, CurTime={BlockTemplate.CurTime}, Compare={timeCompare}");
     throw new StratumException(StratumError.Other, "ntime out of range");
 }
-
         // validate nonce
         if(nonce.Length != 8)
             throw new StratumException(StratumError.Other, "incorrect size of nonce");
