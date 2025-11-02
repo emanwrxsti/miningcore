@@ -474,6 +474,36 @@
         "explorerTxLink": "https://explorer.btcnickel.com/tx/{0}",
         "explorerAccountLink": "https://explorer.btcnickel.com/address/{0}"
     },
+    "bitcoinii": {
+        "name": "BitcoinII",
+        "canonicalName": "BitcoinII",
+        "symbol": "BC2",
+        "family": "bitcoin",
+        "website": "https://bitcoin-ii.org/",
+        "github": "https://github.com/BitcoinII-Dev/BitcoinII/tree/main",
+        "market": "",
+        "twitter": "https://x.com/bc2org/",
+        "telegram": "https://t.me/+mc19GB_d5yo3Yjg5/",
+        "discord": "https://discord.gg/zUSkQHNVyG",
+        "coinbaseHasher": {
+            "hash": "sha256d"
+        },
+        "headerHasher": {
+            "hash": "sha256d"
+        },
+        "blockHasher": {
+            "hash": "reverse",
+            "args": [
+                {
+                    "hash": "sha256d"
+                }
+            ]
+        },
+        "coinbaseIgnoreAuxFlags": true,
+        "explorerBlockLink": "https://bitcoinii.ddns.net/explorer/block-height/{0}",
+        "explorerTxLink": "https://bitcoinii.ddns.net/explorer/tx/{0}",
+        "explorerAccountLink": "https://bitcoinii.ddns.net/explorer/address/{0}"
+    },
     "bitcore": {
         "name": "Bitcore",
         "canonicalName": "Bitcore",
