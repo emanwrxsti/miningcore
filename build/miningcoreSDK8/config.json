@@ -1,0 +1,899 @@
+{
+    "logging": {
+        "level": "info",
+        "enableConsoleLog": true,
+        "enableConsoleColors": true,
+        "logFile": "core.log",
+        "apiLogFile": "api.log",
+        "logBaseDirectory": "/home/pool/.0nlogs",
+        "perPoolLogFile": true
+    },
+    "banning": {
+        "manager": "Integrated",
+        "banOnJunkReceive": true,
+        "banOnInvalidShares": false
+    },
+    "notifications": {
+        "enabled": false,
+        "webhooks": [
+            {
+                "type": "block-found",
+                "url": "https://discord.com/api/webhooks/1420974912725844058/owPgNJqNlcs2o_a9EgLVbzWzg_VzfEHzUgrGLnGkEde2eUroCqnvM3Cjd7WQCEQu_XSx",
+                "body": "{ \"username\": \"Miningcore Bot\", \"embeds\": [ { \"title\": \"🎉 New Block Found!\", \"color\": 3066993, \"fields\": [ { \"name\": \"Pool\", \"value\": \"{{pool}}\", \"inline\": true }, { \"name\": \"Height\", \"value\": \"{{blockHeight}}\", \"inline\": true }, { \"name\": \"Hash\", \"value\": \"`{{blockHash}}`\", \"inline\": false }, { \"name\": \"Miner\", \"value\": \"{{miner}}\", \"inline\": true }, { \"name\": \"Effort\", \"value\": \"{{effort}}%\", \"inline\": true } ], \"footer\": { \"text\": \"icminers.com\" }, \"timestamp\": \"{{blockTime}}Z\" } ] }",
+                "requestHeaders": {
+                    "Content-Type": "application/json"
+                }
+            }
+        ]
+    },
+    "persistence": {
+        "postgres": {
+            "host": "127.0.0.1",
+            "port": 5432,
+            "user": "miningcore",
+            "password": "06ixH01oOqdDNz33",
+            "database": "miningcore",
+            "commandTimeout": 600000
+        },
+        "shareRelays": [
+            {
+                "url": "tcp://eu-stratum:6000",
+                "sharedEncryptionKey": "EUKey1@@!@!"
+            }
+        ]
+    },
+    "paymentProcessing": {
+        "enabled": true,
+        "interval": 3600,
+        "shareRecoveryFile": "recovered-shares.txt"
+    },
+    "api": {
+        "enabled": true,
+        "listenAddress": "127.0.0.1",
+        "port": 4000,
+        "enableWebSocket": true,
+        "metricsIpWhitelist": [],
+        "allowedIpAddresses": [
+            "127.0.0.1/32",
+            "::1/128"
+        ],
+        "tls": {
+            "enabled": false
+        },
+        "rateLimiting": {
+            "disabled": false,
+            "rules": [
+                {
+                    "Endpoint": "*",
+                    "Period": "1s",
+                    "Limit": 500
+                }
+            ],
+            "ipWhitelist": []
+        },
+        "cors": {
+            "enabled": true,
+            "allowedOrigins": [
+                "https://icminers.com",
+                "http://192.168.1.50:3000"
+            ]
+        }
+    },
+    "daemonPollingInterval": 1000,
+    "pools": [
+        
+
+        {
+            "id": "bc2-shared",
+            "enabled": true,
+            "region": "us",
+            "coin": "bitcoinii",
+            "addressType": "BechSegwit",
+            "bechPrefix": "bc",
+            "address": "bc1qlazds8fgy44w77eehqh6m4lgr6dcgqpggz5234",
+            "rewardRecipients": [
+                {
+                    "type": "op",
+                    "address": "bc1qlazds8fgy44w77eehqh6m4lgr6dcgqpggz5234",
+                    "percentage": 0
+                }
+            ],
+            "poolFeePercent": 0,
+            "blockRefreshInterval": 500,
+            "jobRebroadcastTimeout": 5,
+            "banning": {
+                "enabled": true,
+                "banOnInvalidShares": false,
+                "banOnJunkReceive": true,
+                "banThreshold": 50,
+                "banTime": 100
+            },
+            "ports": {
+                "9050": {
+                    "name": "ASIC (Standard - Shared)",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 2000,
+                    "varDiff": {
+                        "minDiff": 500,
+                        "maxDiff": 16384,
+                        "targetTime": 15,
+                        "retargetTime": 60,
+                        "variancePercent": 20,
+                        "maxDelta": 512
+                    }
+                },
+                "9051": {
+                    "name": "ASIC (High Difficulty - Shared)",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 16384,
+                    "varDiff": {
+                        "minDiff": 8192,
+                        "maxDiff": null,
+                        "targetTime": 15,
+                        "retargetTime": 30,
+                        "variancePercent": 15,
+                        "maxDelta": 8192
+                    }
+                }
+            },
+            "daemons": [
+                {
+                    "host": "127.0.0.1",
+                    "port": 8539,
+                    "user": "icminersrpc",
+                    "password": "9jMs!@aWqZy3C",
+                    "timeout": 800000
+                }
+            ],
+            "paymentProcessing": {
+                "enabled": true,
+                "minimumPayment": 1,
+                "keepTransactionFees": true,
+                "payoutScheme": "PPLNS",
+                "payoutSchemeConfig": { "factor": 2 }
+            }
+        },
+        {
+            "id": "bc2-solo",
+            "enabled": true,
+            "region": "us",
+            "coin": "bitcoinii",
+            "addressType": "BechSegwit",
+            "bechPrefix": "bc",
+            "address": "bc1qlazds8fgy44w77eehqh6m4lgr6dcgqpggz5234",
+            "rewardRecipients": [
+                {
+                    "type": "op",
+                    "address": "bc1qlazds8fgy44w77eehqh6m4lgr6dcgqpggz5234",
+                    "percentage": 0
+                }
+            ],
+            "poolFeePercent": 0,
+            "blockRefreshInterval": 500,
+            "jobRebroadcastTimeout": 5,
+            "banning": {
+                "enabled": true,
+                "banOnInvalidShares": false,
+                "banOnJunkReceive": true,
+                "banThreshold": 50,
+                "banTime": 100
+            },
+            "ports": {
+                "9052": {
+                    "name": "ASIC (Standard - Solo)",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 1000,
+                    "varDiff": {
+                        "minDiff": 548,
+                        "maxDiff": 16384,
+                        "targetTime": 15,
+                        "retargetTime": 60,
+                        "variancePercent": 20,
+                        "maxDelta": 512
+                    }
+                },
+                "9053": {
+                    "name": "ASIC (High Difficulty - Solo)",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 16384,
+                    "varDiff": {
+                        "minDiff": 8192,
+                        "maxDiff": null,
+                        "targetTime": 15,
+                        "retargetTime": 30,
+                        "variancePercent": 15,
+                        "maxDelta": 8192
+                    }
+                }
+            },
+            "daemons": [
+                {
+                    "host": "127.0.0.1",
+                    "port": 8539,
+                    "user": "icminersrpc",
+                    "password": "9jMs!@aWqZy3C",
+                    "timeout": 800000
+                }
+            ],
+            "paymentProcessing": {
+                "enabled": true,
+                "minimumPayment": 1,
+                "keepTransactionFees": true,
+                "payoutScheme": "SOLO",
+                "payoutSchemeConfig": { "factor": 2 }
+            }
+        },
+        {
+            "id": "bkc-shared",
+            "enabled": true,
+            "region": "us",
+            "coin": "briskcoin",
+            "address": "bc1q3jfh0jmftxmaw9q9akfysujrr6rhgzrsxrr8gk",
+            "addressType": "BechSegwit",
+            "bechPrefix": "bc",
+            "rewardRecipients": [
+                {
+                    "type": "op",
+                    "address": "bc1q3jfh0jmftxmaw9q9akfysujrr6rhgzrsxrr8gk",
+                    "percentage": 0
+                }
+            ],
+            "poolFeePercent": 0,
+            "blockRefreshInterval": 500,
+            "jobRebroadcastTimeout": 5,
+            "banning": {
+                "enabled": true,
+                "banOnInvalidShares": false,
+                "banOnJunkReceive": true,
+                "banThreshold": 50,
+                "banTime": 100
+            },
+            "ports": {
+                "9410": {
+                    "name": "Shared Low-Difficulty",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 1000,
+                    "varDiff": {
+                        "minDiff": 548,
+                        "maxDiff": 16384,
+                        "targetTime": 15,
+                        "retargetTime": 60,
+                        "variancePercent": 20,
+                        "maxDelta": 512
+                    }
+                },
+                "9411": {
+                    "name": "Shared High-Difficulty (TH–PH Range)",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 16384,
+                    "varDiff": {
+                        "minDiff": 8192,
+                        "maxDiff": null,
+                        "targetTime": 15,
+                        "retargetTime": 30,
+                        "variancePercent": 15,
+                        "maxDelta": 8192
+                    }
+                }
+            },
+            "daemons": [
+                {
+                    "host": "127.0.0.1",
+                    "port": 18766,
+                    "user": "briskrpc",
+                    "password": "StrongPassHere123",
+                    "walletName": "poolwallet",
+                    "zmqBlockNotifySocket": "tcp://127.0.0.1:29332",
+                    "zmqTxNotifySocket": "tcp://127.0.0.1:29333",
+                    "ZmqSubscriberRetryInterval": 1
+                }
+            ],
+            "paymentProcessing": {
+                "enabled": true,
+                "minimumPayment": 1,
+                "keepTransactionFees": true,
+                "payoutScheme": "PPLNS",
+                "payoutSchemeConfig": { "factor": 2 }
+            }
+        },
+        {
+            "id": "bkc-solo",
+            "enabled": true,
+            "region": "us",
+            "coin": "briskcoin",
+            "address": "bc1q3jfh0jmftxmaw9q9akfysujrr6rhgzrsxrr8gk",
+            "addressType": "BechSegwit",
+            "bechPrefix": "bc",
+            "rewardRecipients": [
+                {
+                    "type": "op",
+                    "address": "bc1q3jfh0jmftxmaw9q9akfysujrr6rhgzrsxrr8gk",
+                    "percentage": 0
+                }
+            ],
+            "poolFeePercent": 0,
+            "blockRefreshInterval": 500,
+            "jobRebroadcastTimeout": 5,
+            "banning": {
+                "enabled": true,
+                "banOnInvalidShares": false,
+                "banOnJunkReceive": true,
+                "banThreshold": 50,
+                "banTime": 100
+            },
+            "ports": {
+                "9412": {
+                    "name": "Solo Low-Difficulty",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 1000,
+                    "varDiff": {
+                        "minDiff": 528,
+                        "maxDiff": 16384,
+                        "targetTime": 15,
+                        "retargetTime": 60,
+                        "variancePercent": 20,
+                        "maxDelta": 512
+                    }
+                },
+                "9413": {
+                    "name": "Solo High-Difficulty (TH–PH Range)",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 16384,
+                    "varDiff": {
+                        "minDiff": 8192,
+                        "maxDiff": null,
+                        "targetTime": 15,
+                        "retargetTime": 30,
+                        "variancePercent": 15,
+                        "maxDelta": 8192
+                    }
+                }
+            },
+            "daemons": [
+                {
+                    "host": "127.0.0.1",
+                    "port": 18766,
+                    "user": "briskrpc",
+                    "password": "StrongPassHere123",
+                    "walletName": "poolwallet",
+                    "zmqBlockNotifySocket": "tcp://127.0.0.1:29332",
+                    "zmqTxNotifySocket": "tcp://127.0.0.1:29333",
+                    "ZmqSubscriberRetryInterval": 1
+                }
+            ],
+            "paymentProcessing": {
+                "enabled": true,
+                "minimumPayment": 1,
+                "keepTransactionFees": true,
+                "payoutScheme": "SOLO",
+                "payoutSchemeConfig": { "factor": 2 }
+            }
+        },
+        {
+            "id": "scash-shared",
+            "enabled": true,
+            "region": "us",
+            "coin": "satoshicash",
+            "randomXRealm": "scash-shared",
+            "address": "scash1qfjgejpk9zku6ltw59a7025q46v9seen4zlsqjs",
+            "addressType": "BechSegwit",
+            "bechPrefix": "scash",
+            "rewardRecipients": [
+                {
+                    "type": "op",
+                    "address": "scash1qfjgejpk9zku6ltw59a7025q46v9seen4zlsqjs",
+                    "percentage": 0
+                }
+            ],
+            "poolFeePercent": 0,
+            "blockRefreshInterval": 500,
+            "jobRebroadcastTimeout": 5,
+            "banning": {
+                "enabled": false,
+                "time": 600,
+                "invalidPercent": 50,
+                "checkThreshold": 50
+            },
+            "ports": {
+                "9100": {
+                    "name": "Shared High-Difficulty",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 2,
+                    "varDiff": {
+                        "minDiff": 0.0125,
+                        "maxDiff": 12,
+                        "targetTime": 20,
+                        "retargetTime": 60,
+                        "variancePercent": 30,
+                        "maxDelta": 0.5
+                    }
+                },
+                "9101": {
+                    "name": "Shared Low-Difficulty",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 1,
+                    "varDiff": {
+                        "minDiff": 0.0125,
+                        "maxDiff": 3,
+                        "targetTime": 20,
+                        "retargetTime": 60,
+                        "variancePercent": 25,
+                        "maxDelta": 0.5
+                    }
+                }
+            },
+            "daemons": [
+                {
+                    "host": "127.0.0.1",
+                    "port": 9642,
+                    "user": "scashrpc",
+                    "password": "YourStrongPassword",
+                    "walletName": "poolwallet",
+                    "zmqBlockNotifySocket": "tcp://127.0.0.1:8344",
+                    "zmqTxNotifySocket": "tcp://127.0.0.1:8343",
+                    "zmqBlockNotifyTopic": "rawblock",
+                    "ZmqSubscriberRetryInterval": 1
+                }
+            ],
+            "paymentProcessing": {
+                "enabled": true,
+                "minimumPayment": 1,
+                "keepTransactionFees": true,
+                "payoutScheme": "PPLNS",
+                "payoutSchemeConfig": { "factor": 2 }
+            }
+        },
+        {
+            "id": "rxd-shared",
+            "enabled": true,
+            "region": "us",
+            "coin": "radiant",
+            "timeOffset": 25,
+            "address": "1C6SXZbxZUV7uXS7kCyREg58okThWvHV3n",
+            "rewardRecipients": [
+                {
+                    "type": "op",
+                    "address": "1C6SXZbxZUV7uXS7kCyREg58okThWvHV3n",
+                    "percentage": 0
+                }
+            ],
+            "poolFeePercent": 0,
+            "blockRefreshInterval": 500,
+            "jobRebroadcastTimeout": 5,
+            "clientReconnectCooldown": 1,
+            "clientCleanJobsOnConnect": true,
+            "skipCleanOldJobsOnBroadcast": true,
+            "enableDuplicateShareDetection": true,
+            "maxActiveJobsPerMiner": 100,
+            "banning": {
+                "enabled": true,
+                "banOnInvalidShares": false,
+                "banOnJunkReceive": true,
+                "banThreshold": 50,
+                "banTime": 200
+            },
+            "ports": {
+                "9040": {
+                    "name": "ASIC IceRiver RX0 (260–400+ GH/s - Shared)",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 530,
+                    "varDiff": {
+                        "minDiff": 256,
+                        "maxDiff": 4096,
+                        "targetTime": 15,
+                        "retargetTime": 60,
+                        "variancePercent": 25,
+                        "maxDelta": 512
+                    }
+                },
+                "9041": {
+                    "name": "ASIC DragonBall A11 (High-Diff - Shared)",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 4096,
+                    "varDiff": {
+                        "minDiff": 2048,
+                        "maxDiff": null,
+                        "targetTime": 15,
+                        "retargetTime": 60,
+                        "variancePercent": 20,
+                        "maxDelta": 512
+                    }
+                }
+            },
+            "daemons": [
+                {
+                    "host": "127.0.0.1",
+                    "port": 8332,
+                    "user": "pool",
+                    "password": "06ixH01oOqdDNz33",
+                    "timeout": 800000
+                }
+            ],
+            "paymentProcessing": {
+                "enabled": true,
+                "minimumPayment": 1,
+                "keepTransactionFees": true,
+                "payoutScheme": "PPLNS",
+                "payoutSchemeConfig": {
+                    "factor": 2
+                }
+            }
+        },
+        {
+            "id": "rxd-solo",
+            "enabled": true,
+            "region": "us",
+            "coin": "radiant",
+            "timeOffset": 25,
+            "address": "1C6SXZbxZUV7uXS7kCyREg58okThWvHV3n",
+            "rewardRecipients": [
+                {
+                    "type": "op",
+                    "address": "1C6SXZbxZUV7uXS7kCyREg58okThWvHV3n",
+                    "percentage": 0
+                }
+            ],
+            "poolFeePercent": 0,
+            "blockRefreshInterval": 500,
+            "jobRebroadcastTimeout": 5,
+            "clientReconnectCooldown": 1,
+            "clientCleanJobsOnConnect": true,
+            "skipCleanOldJobsOnBroadcast": true,
+            "enableDuplicateShareDetection": true,
+            "maxActiveJobsPerMiner": 50,
+            "banning": {
+                "enabled": true,
+                "banOnInvalidShares": false,
+                "banOnJunkReceive": true,
+                "banThreshold": 50,
+                "banTime": 100
+            },
+            "ports": {
+                "9042": {
+                    "name": "ASIC IceRiver RX0 (260–400 GH/s - Solo)",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 530,
+                    "varDiff": {
+                        "minDiff": 256,
+                        "maxDiff": 4096,
+                        "targetTime": 15,
+                        "retargetTime": 60,
+                        "variancePercent": 25,
+                        "maxDelta": 512
+                    }
+                },
+                "9043": {
+                    "name": "ASIC DragonBall A11 (1–5 TH/s - Solo)",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 4096,
+                    "varDiff": {
+                        "minDiff": 2048,
+                        "maxDiff": null,
+                        "targetTime": 15,
+                        "retargetTime": 60,
+                        "variancePercent": 20,
+                        "maxDelta": 512
+                    }
+                }
+            },
+            "daemons": [
+                {
+                    "host": "127.0.0.1",
+                    "port": 8332,
+                    "user": "pool",
+                    "password": "06ixH01oOqdDNz33",
+                    "timeout": 800000
+                }
+            ],
+            "paymentProcessing": {
+                "enabled": true,
+                "minimumPayment": 1,
+                "keepTransactionFees": true,
+                "payoutScheme": "SOLO",
+                "payoutSchemeConfig": {
+                    "factor": 2
+                }
+            }
+        },
+        {
+            "id": "vtc-shared",
+            "enabled": true,
+            "region": "us",
+            "vertHashDataFile": "/home/pool/.vertcoin/verthash.dat",
+            "coin": "vertcoin",
+            "timeOffset": 10,
+            "address": "VwWRQApZ9VioxFdWtmQra2aRzZQos6M4vu",
+            "rewardRecipients": [
+                {
+                    "type": "op",
+                    "address": "VwWRQApZ9VioxFdWtmQra2aRzZQos6M4vu",
+                    "percentage": 0
+                }
+            ],
+            "poolFeePercent": 0,
+            "blockRefreshInterval": 500,
+            "jobRebroadcastTimeout": 5,
+            "clientReconnectCooldown": 1,
+            "clientConnectionTimeout": 1000,
+            "skipCleanOldJobsOnBroadcast": true,
+            "banning": {
+                "enabled": true,
+                "banOnInvalidShares": false,
+                "banOnJunkReceive": true,
+                "banThreshold": 50,
+                "banTime": 100
+            },
+            "ports": {
+                "9064": {
+                    "name": "GPU Standard (Verthash)",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 30,
+                    "varDiff": {
+                        "minDiff": 15,
+                        "maxDiff": 2048,
+                        "targetTime": 15,
+                        "retargetTime": 60,
+                        "variancePercent": 25,
+                        "maxDelta": 512
+                    }
+                },
+                "9065": {
+                    "name": "GPU / CPU Low-Diff (Verthash)",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 64,
+                    "varDiff": {
+                        "minDiff": 32,
+                        "maxDiff": 2048,
+                        "targetTime": 15,
+                        "retargetTime": 60,
+                        "variancePercent": 25,
+                        "maxDelta": 512
+                    }
+                }
+            },
+            "daemons": [
+                {
+                    "host": "127.0.0.1",
+                    "port": 5888,
+                    "user": "vertuser",
+                    "password": "vertpass123",
+                    "timeout": 800000
+                }
+            ],
+            "paymentProcessing": {
+                "enabled": true,
+                "minimumPayment": 1,
+                "keepTransactionFees": true,
+                "payoutScheme": "PPLNS",
+                "payoutSchemeConfig": { "factor": 2 }
+            }
+        },
+
+        {
+            "id": "vtc-solo",
+            "enabled": true,
+            "region": "us",
+            "vertHashDataFile": "/home/pool/.vertcoin/verthash.dat",
+            "coin": "vertcoin",
+            "timeOffset": 10,
+            "address": "VwWRQApZ9VioxFdWtmQra2aRzZQos6M4vu",
+            "rewardRecipients": [
+                {
+                    "type": "op",
+                    "address": "VwWRQApZ9VioxFdWtmQra2aRzZQos6M4vu",
+                    "percentage": 0
+                }
+            ],
+            "poolFeePercent": 0,
+            "blockRefreshInterval": 500,
+            "jobRebroadcastTimeout": 5,
+            "clientReconnectCooldown": 1,
+            "clientConnectionTimeout": 1000,
+            "skipCleanOldJobsOnBroadcast": true,
+            "banning": {
+                "enabled": true,
+                "banOnInvalidShares": false,
+                "banOnJunkReceive": true,
+                "banThreshold": 50,
+                "banTime": 100
+            },
+            "ports": {
+                "9066": {
+                    "name": "GPU Standard (Verthash - SOLO)",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 30,
+                    "varDiff": {
+                        "minDiff": 15,
+                        "maxDiff": 2048,
+                        "targetTime": 15,
+                        "retargetTime": 60,
+                        "variancePercent": 25,
+                        "maxDelta": 512
+                    }
+                },
+                "9067": {
+                    "name": "GPU Low-Diff (Verthash - SOLO)",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 64,
+                    "varDiff": {
+                        "minDiff": 32,
+                        "maxDiff": 2048,
+                        "targetTime": 15,
+                        "retargetTime": 60,
+                        "variancePercent": 25,
+                        "maxDelta": 512
+                    }
+                }
+            },
+            "daemons": [
+                {
+                    "host": "127.0.0.1",
+                    "port": 5888,
+                    "user": "vertuser",
+                    "password": "vertpass123",
+                    "timeout": 80000
+                }
+            ],
+            "paymentProcessing": {
+                "enabled": true,
+                "minimumPayment": 1,
+                "keepTransactionFees": true,
+                "payoutScheme": "SOLO",
+                "payoutSchemeConfig": {
+                    "factor": 2
+                }
+            }
+        },
+        {
+            "id": "alph-shared",
+            "enabled": true,
+            "region": "us",
+            "coin": "alephium",
+            "timeOffset": 25,
+            "address": "1FuiTd5TU17kSERfbYU2htzZpoAw34CS82wwJ6T35PD24",
+            "rewardRecipients": [
+                {
+                    "type": "op",
+                    "address": "1FuiTd5TU17kSERfbYU2htzZpoAw34CS82wwJ6T35PD24",
+                    "percentage": 0
+                }
+            ],
+            "poolFeePercent": 0,
+            "blockRefreshInterval": 500,
+            "jobRebroadcastTimeout": 5,
+            "clientReconnectCooldown": 1,
+            "clientCleanJobsOnConnect": true,
+            "skipCleanOldJobsOnBroadcast": true,
+            "maxActiveJobsPerMiner": 50,
+            "clientConnectionTimeout": 1000,
+            "banning": {
+                "enabled": true,
+                "time": 600,
+                "invalidPercent": 30,
+                "checkThreshold": 20
+            },
+            "ports": {
+                "9060": {
+                    "name": "ASIC IceRiver AL2 / AL1 (Shared)",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 530,
+                    "varDiff": {
+                        "minDiff": 256,
+                        "maxDiff": 8192,
+                        "targetTime": 15,
+                        "retargetTime": 60,
+                        "variancePercent": 20,
+                        "maxDelta": 512
+                    }
+                },
+                "9061": {
+                    "name": "ASIC Goldshell AL-BOX III / II Plus / IceRiver AL3 (Shared)",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 4096,
+                    "varDiff": {
+                        "minDiff": 2048,
+                        "maxDiff": null,
+                        "targetTime": 15,
+                        "retargetTime": 60,
+                        "variancePercent": 20,
+                        "maxDelta": 512
+                    }
+                }
+            },
+            "daemons": [
+                {
+                    "host": "127.0.0.1",
+                    "port": 12973,
+                    "apiKey": "rG7kD9sL2VhX4mPqZ1BfE8cT5YwR3uN0",
+                    "minerApiPort": 10973,
+                    "timeout": 80000
+                }
+            ],
+            "paymentProcessing": {
+                "enabled": true,
+                "walletName": "alph-wallet-2025",
+                "walletPassword": "rG7kD9sL2VhX4mPqZ1BfE8cT5YwR3uN0",
+                "minimumPayment": 1,
+                "keepTransactionFees": true,
+                "payoutScheme": "PPLNS",
+                "payoutSchemeConfig": { "factor": 2 }
+            }
+        },
+        {
+            "id": "alph-solo",
+            "enabled": true,
+            "region": "us",
+            "coin": "alephium",
+            "timeOffset": 25,
+            "address": "1FuiTd5TU17kSERfbYU2htzZpoAw34CS82wwJ6T35PD24",
+            "rewardRecipients": [
+                {
+                    "type": "op",
+                    "address": "1FuiTd5TU17kSERfbYU2htzZpoAw34CS82wwJ6T35PD24",
+                    "percentage": 0
+                }
+            ],
+            "poolFeePercent": 0,
+            "blockRefreshInterval": 500,
+            "jobRebroadcastTimeout": 5,
+            "clientReconnectCooldown": 1,
+            "clientCleanJobsOnConnect": true,
+            "skipCleanOldJobsOnBroadcast": true,
+            "maxActiveJobsPerMiner": 50,
+            "clientConnectionTimeout": 1000,
+            "banning": {
+                "enabled": true,
+                "banOnInvalidShares": false,
+                "banOnJunkReceive": true,
+                "banThreshold": 50,
+                "banTime": 100
+            },
+            "ports": {
+                "9062": {
+                    "name": "ASIC IceRiver AL2 Lite / Goldshell AL-BOX II / III (SOLO)",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 530,
+                    "varDiff": {
+                        "minDiff": 256,
+                        "maxDiff": 8192,
+                        "targetTime": 15,
+                        "retargetTime": 60,
+                        "variancePercent": 20,
+                        "maxDelta": 512
+                    }
+                },
+                "9063": {
+                    "name": "ASIC IceRiver AL3 / Bitmain AL1 / AL-BOX Ultra (SOLO)",
+                    "listenAddress": "0.0.0.0",
+                    "difficulty": 4096,
+                    "varDiff": {
+                        "minDiff": 2048,
+                        "maxDiff": null,
+                        "targetTime": 15,
+                        "retargetTime": 60,
+                        "variancePercent": 20,
+                        "maxDelta": 512
+                    }
+                }
+            },
+            "daemons": [
+                {
+                    "host": "127.0.0.1",
+                    "port": 12973,
+                    "apiKey": "rG7kD9sL2VhX4mPqZ1BfE8cT5YwR3uN0",
+                    "minerApiPort": 10973,
+                    "timeout": 80000
+                }
+            ],
+            "paymentProcessing": {
+                "enabled": true,
+                "walletName": "alph-wallet-2025",
+                "walletPassword": "rG7kD9sL2VhX4mPqZ1BfE8cT5YwR3uN0",
+                "minimumPayment": 1,
+                "keepTransactionFees": true,
+                "payoutScheme": "SOLO",
+                "payoutSchemeConfig": { "factor": 2 }
+            }
+        }
+    ]
+}
