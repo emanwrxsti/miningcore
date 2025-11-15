@@ -3,11 +3,13 @@
 *.sln.docstates
 .vs/
 .vscode/
-
+build/
+build/*
+bin/
+obj/
 [Dd]ebug/
 [Rr]elease/
 x64/
-build/
 build.backup/
 [Bb]in/
 [Oo]bj/
