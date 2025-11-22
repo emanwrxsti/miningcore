@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <TargetFramework>net6.0</TargetFramework>
+        <TargetFramework>net8.0</TargetFramework>
         <AssemblyName>Miningcore</AssemblyName>
         <RootNamespace>Miningcore</RootNamespace>
         <ServerGarbageCollection>true</ServerGarbageCollection>
@@ -128,7 +128,7 @@
 
     <!-- Build library binaries from source on Linux -->
     <Target Name="BuildNativeLibsLinux" AfterTargets="AfterBuild" Condition="'$(IsLinux)' == 'true'">
-        <Exec Command="(cd $(ProjectDir) &amp;&amp; sh build-libs-linux.sh $(OutDir))" />
+<!--        <Exec Command="(cd $(ProjectDir) &amp;&amp; sh build-libs-linux.sh $(OutDir))" />-->
     </Target>
 
     <!-- Include library binaries in publish on Windows -->
