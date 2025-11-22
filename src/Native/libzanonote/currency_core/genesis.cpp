@@ -4,7 +4,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "genesis.h"
-#include <cstdint>
+
 namespace currency
 {
 #ifndef TESTNET

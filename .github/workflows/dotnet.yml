@@ -1,4 +1,4 @@
-name: .NET CI
+name: .NET
 
 on:
   push:
@@ -12,32 +12,19 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+    - name: Checkout
+      uses: actions/checkout@v2
       with:
-        fetch-depth: 0
-
-    - name: Install build dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake ninja-build build-essential libssl-dev pkg-config libboost-all-dev libsodium-dev
-
-    - name: Setup .NET (6 + 8)
-      uses: actions/setup-dotnet@v3
+        fetch-depth: 0    
+    - name: Install Build dependencies
+      run: sudo apt-get install -y cmake cmake ninja-build build-essential libssl-dev pkg-config libboost-all-dev libsodium-dev libzmq5 libgmp-dev
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v2
       with:
-        dotnet-version: |
-          8.0.415
-          6.0.x
-
-    # --- FIX STARTS HERE ---
-    - name: Restore dependencies (core only)
-      run: dotnet restore src/Miningcore/Miningcore.csproj
-
-    - name: Build Miningcore
-      run: dotnet build --configuration Release --no-restore src/Miningcore/Miningcore.csproj
-
-    - name: Optional Test execution
-      run: dotnet test --no-build src/Miningcore.Tests/Miningcore.Tests.csproj
-      continue-on-error: true
-    # --- FIX ENDS HERE ---
-
+        dotnet-version: 6.0.x
+    - name: Restore dependencies
+      run: dotnet restore src
+    - name: Build
+      run: dotnet build --no-restore src
+    - name: Test
+      run: dotnet test --logger:"console;verbosity=detailed" --no-build --verbosity normal src

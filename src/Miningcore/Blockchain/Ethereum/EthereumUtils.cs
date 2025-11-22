@@ -28,5 +28,25 @@ public static class EthereumUtils
 
         if(chainType == GethChainType.Callisto)
             chainType = GethChainType.Callisto;
+
+        // PowLayer detection by network ID - always check this first to override the chain type
+        if(networkType == (EthereumNetworkType) 70707)
+            chainType = GethChainType.PowLayer;
+
+        // ZapChain detection by network ID - always check this first to override the chain type
+        if(networkType == (EthereumNetworkType) 757)
+            chainType = GethChainType.ZapChain;
+
+        // Etica detection by network ID - always check this first to override the chain type
+        if(networkType == (EthereumNetworkType) 61803)
+            chainType = GethChainType.Etica;
+
+        // Thoreum detection by network ID - always check this first to override the chain type
+        if(networkType == (EthereumNetworkType) 357)
+            chainType = GethChainType.Thoreum;
+
+        // Parallax detection by network ID - always check this first to override the chain type
+        if(networkType == (EthereumNetworkType) 2110)
+            chainType = GethChainType.Parallax;
     }
 }

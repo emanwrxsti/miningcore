@@ -121,8 +121,25 @@ public class EthereumPayoutHandler : PayoutHandlerBase,
 
                 uint totalDuplicateBlockBefore = 0;
                 
+                // Safety check - if block info is null or block not found on chain, orphan it
+                if(blockInfo == null)
+                {
+                    logger.Warn(() => $"[{LogCategory}] Block {block.BlockHeight} not found on chain - marking as orphaned");
+                    block.Hash = "0x0";
+                    block.Status = BlockStatus.Orphaned;
+                    block.Reward = 0;
+                    messageBus.NotifyBlockUnlocked(poolConfig.Id, block, coin);
+                    continue;
+                }
+                
                 // is it block mined by us?
-                if(string.Equals(blockInfo.Miner, poolConfig.Address, StringComparison.OrdinalIgnoreCase))
+                var minerMatches = string.Equals(blockInfo.Miner, poolConfig.Address, StringComparison.OrdinalIgnoreCase);
+                
+                // NOTE: Removed Etica-specific miner override logic (lines 127-138) that was causing false positives
+                // where blocks from other pools were being claimed. The miner field should always match pool address
+                // for blocks we actually mined. Any mismatch indicates the block is not ours.
+                
+                if(minerMatches)
                 {
                     // mature?
                     if(latestBlockHeight - block.BlockHeight >= EthereumConstants.MinConfimations)
@@ -187,18 +204,36 @@ public class EthereumPayoutHandler : PayoutHandlerBase,
                                 new[] { (object) block.BlockHeight.ToStringHexWithPrefix(), true });
                             
                             var blockMiner = blockHashResponse.Response.Miner;
+                            var blockHash = blockHashResponse.Response.Hash;
+                            
+                            // Etica-specific validation: Check stored block hash if available to prevent false positives
+                            var isOurBlock = string.Equals(blockMiner, poolConfig.Address, StringComparison.OrdinalIgnoreCase);
+                            if(isOurBlock && chainType == GethChainType.Etica && !string.IsNullOrEmpty(block.Hash) && block.Hash != "0x0")
+                            {
+                                // If we have a stored hash, verify it matches
+                                if(!string.Equals(block.Hash, blockHash, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    // Hash mismatch - this is not our block, someone else's block replaced ours
+                                    logger.Warn(() => $"[{LogCategory}] Etica block {block.BlockHeight} hash mismatch. Stored: {block.Hash}, Chain: {blockHash}. Block was replaced - marking as orphaned.");
+                                    block.Hash = "0x0";
+                                    block.Status = BlockStatus.Orphaned;
+                                    block.Reward = 0;
+                                    messageBus.NotifyBlockUnlocked(poolConfig.Id, block, coin);
+                                    continue;
+                                }
+                            }
                             
                             // is it still block mined by us?
-                            if(string.Equals(blockMiner, poolConfig.Address, StringComparison.OrdinalIgnoreCase))
+                            if(isOurBlock)
                             {
-                                var blockHash = blockHashResponse.Response.Hash;
                                 var baseGas = blockHashResponse.Response.BaseFeePerGas;
                                 var gasUsed = blockHashResponse.Response.GasUsed;
 
                                 var burnedFee = (decimal) 0;
-                                if(extraPoolConfig?.ChainTypeOverride == "Ethereum" || extraPoolConfig?.ChainTypeOverride == "Main" || extraPoolConfig?.ChainTypeOverride == "MainPow" || extraPoolConfig?.ChainTypeOverride == "Ubiq" || extraPoolConfig?.ChainTypeOverride == "EtherOne" || extraPoolConfig?.ChainTypeOverride == "Pink" || extraPoolConfig?.ChainTypeOverride == "Hypra")
+                                if(extraPoolConfig?.ChainTypeOverride == "Ethereum" || extraPoolConfig?.ChainTypeOverride == "Main" || extraPoolConfig?.ChainTypeOverride == "MainPow" || extraPoolConfig?.ChainTypeOverride == "Ubiq" || extraPoolConfig?.ChainTypeOverride == "EtherOne" || extraPoolConfig?.ChainTypeOverride == "Pink" || extraPoolConfig?.ChainTypeOverride == "Hypra" || networkType == EthereumNetworkType.PowLayer || chainType == GethChainType.PowLayer || networkType == EthereumNetworkType.ZapChain || chainType == GethChainType.ZapChain)
                                     burnedFee = (baseGas * gasUsed / EthereumConstants.Wei);
 
+                                // For Etica: Store block hash immediately when confirming to help with future validation
                                 block.Hash = blockHash;
                                 block.Status = BlockStatus.Confirmed;
                                 block.ConfirmationProgress = 1;
@@ -258,6 +293,21 @@ public class EthereumPayoutHandler : PayoutHandlerBase,
 
                         if(uncle != null)
                         {
+                            // Etica-specific: Verify that the uncle's hash matches our pending block's hash
+                            // to prevent false positives where we match unrelated uncles
+                            // This fixes an issue on Etica where uncles from other pools were being incorrectly matched
+                            if(chainType == GethChainType.Etica && !string.IsNullOrEmpty(block.Hash) && block.Hash != "0x0" && block.Hash != null)
+                            {
+                                if(!string.Equals(block.Hash, uncle.Hash, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    // Uncle miner matches, but hash doesn't - this is NOT our uncle!
+                                    logger.Warn(() => $"[{LogCategory}] Etica uncle hash mismatch at height {uncle.Height.Value}. Pending block hash: {block.Hash}, Uncle hash: {uncle.Hash}. Skipping this uncle match to prevent false positives.");
+                                    continue;
+                                }
+                                
+                                logger.Debug(() => $"[{LogCategory}] Etica uncle hash match verified for height {uncle.Height.Value}: {block.Hash}");
+                            }
+                            
                             totalDuplicateBlockBefore = await cf.Run(con => blockRepo.GetPoolDuplicateBlockBeforeCountByPoolHeightNoTypeAndStatusAsync(con, poolConfig.Id, Convert.ToInt64(uncle.Height.Value), new[]
                             {
                                 BlockStatus.Confirmed,
@@ -383,7 +433,7 @@ public class EthereumPayoutHandler : PayoutHandlerBase,
         // ensure we have enough peers
         var infoResponse = await rpcClient.ExecuteAsync<string>(logger, EC.GetPeerCount, ct);
 
-        if((networkType == EthereumNetworkType.Main || extraPoolConfig?.ChainTypeOverride == "Classic" || extraPoolConfig?.ChainTypeOverride == "Mordor" || networkType == EthereumNetworkType.MainPow || extraPoolConfig?.ChainTypeOverride == "Ubiq" || extraPoolConfig?.ChainTypeOverride == "EtherOne" || extraPoolConfig?.ChainTypeOverride == "Pink" || extraPoolConfig?.ChainTypeOverride == "OctaSpace" || extraPoolConfig?.ChainTypeOverride == "OctaSpaceTestnet" || extraPoolConfig?.ChainTypeOverride == "Hypra" || extraPoolConfig?.ChainTypeOverride == "Cortex" || extraPoolConfig?.ChainTypeOverride == "Dolores" || extraPoolConfig?.ChainTypeOverride == "Bernard") &&
+        if((networkType == EthereumNetworkType.Main || extraPoolConfig?.ChainTypeOverride == "Classic" || extraPoolConfig?.ChainTypeOverride == "Mordor" || networkType == EthereumNetworkType.MainPow || extraPoolConfig?.ChainTypeOverride == "Ubiq" || extraPoolConfig?.ChainTypeOverride == "EtherOne" || extraPoolConfig?.ChainTypeOverride == "Pink" || extraPoolConfig?.ChainTypeOverride == "OctaSpace" || extraPoolConfig?.ChainTypeOverride == "OctaSpaceTestnet" || extraPoolConfig?.ChainTypeOverride == "Hypra" || extraPoolConfig?.ChainTypeOverride == "Cortex" || extraPoolConfig?.ChainTypeOverride == "Dolores" || extraPoolConfig?.ChainTypeOverride == "Bernard" || networkType == EthereumNetworkType.PowLayer || chainType == GethChainType.PowLayer || networkType == EthereumNetworkType.ZapChain || chainType == GethChainType.ZapChain || networkType == EthereumNetworkType.Etica || chainType == GethChainType.Etica || networkType == EthereumNetworkType.Thoreum || chainType == GethChainType.Thoreum || networkType == EthereumNetworkType.Parallax || chainType == GethChainType.Parallax) &&
            (infoResponse.Error != null || string.IsNullOrEmpty(infoResponse.Response) ||
                infoResponse.Response.IntegralFromHex<int>() < EthereumConstants.MinPayoutPeerCount))
         {
@@ -515,6 +565,44 @@ public class EthereumPayoutHandler : PayoutHandlerBase,
 
                 return CortexConstants.BaseRewardInitial;
 
+            case GethChainType.PowLayer:
+                // PowLayer block reward is 1 XPL per block
+                return 1.0m;
+
+            case GethChainType.Thoreum:
+                // Thoreum block reward distribution
+                if(height <= ThoreumConstants.Range1End)
+                    return ThoreumConstants.Range1Reward;
+                if(height <= ThoreumConstants.Range2End)
+                    return ThoreumConstants.Range2Reward;
+                if(height <= ThoreumConstants.Range3End)
+                    return ThoreumConstants.Range3Reward;
+                if(height <= ThoreumConstants.Range4End)
+                    return ThoreumConstants.Range4Reward;
+                if(height <= ThoreumConstants.Range5End)
+                    return ThoreumConstants.Range5Reward;
+                if(height <= ThoreumConstants.Range6End)
+                    return ThoreumConstants.Range6Reward;
+                if(height <= ThoreumConstants.Range7End)
+                    return ThoreumConstants.Range7Reward;
+                if(height <= ThoreumConstants.Range8End)
+                    return ThoreumConstants.Range8Reward;
+                // Beyond range 8, return 0.1 THR
+                return ThoreumConstants.Range8Reward;
+
+            case GethChainType.ZapChain:
+                // ZapChain block reward is 0.10 ZAP per block
+                return 0.10m;
+
+            case GethChainType.Etica:
+                return EticaConstants.BaseRewardInitial;
+
+            case GethChainType.Parallax:
+                // Parallax block reward follows Bitcoin's halving pattern
+                // Initial reward: 50 LAX, halves every 210,000 blocks
+                var halvingCount = Math.Floor((decimal) height / ParallaxConstants.HalvingInterval);
+                return ParallaxConstants.InitialBlockReward / (decimal) Math.Pow(2, (double) halvingCount);
+
             default:
                 throw new Exception("Unable to determine block reward: Unsupported chain type");
         }
@@ -630,7 +718,40 @@ public class EthereumPayoutHandler : PayoutHandlerBase,
             Value = amount.ToString("x").TrimStart('0'),
         };
         
-        if(extraPoolConfig?.ChainTypeOverride == "Ethereum" || extraPoolConfig?.ChainTypeOverride == "Main" || (extraPoolConfig?.ChainTypeOverride == "Ubiq") || extraPoolConfig?.ChainTypeOverride == "MainPow" || extraPoolConfig?.ChainTypeOverride == "EtherOne" )
+        // Handle PowLayer with legacy transactions (check this first!)
+        if(networkType == EthereumNetworkType.PowLayer || chainType == GethChainType.PowLayer)
+        {
+            logger.Info(() => $"[{LogCategory}] PowLayer Transaction (Legacy)");
+            
+            request.Gas = extraConfig.Gas;
+            request.GasPrice = extraConfig.MaxFeePerGas;
+        }
+        // Handle ZapChain with legacy transactions (check this first!)
+        else if(networkType == EthereumNetworkType.ZapChain || chainType == GethChainType.ZapChain)
+        {
+            logger.Info(() => $"[{LogCategory}] ZapChain Transaction (Legacy)");
+            
+            request.Gas = extraConfig.Gas;
+            request.GasPrice = extraConfig.MaxFeePerGas;
+        }
+        // Handle Thoreum with legacy transactions
+        else if(networkType == EthereumNetworkType.Thoreum || chainType == GethChainType.Thoreum)
+        {
+            logger.Info(() => $"[{LogCategory}] Thoreum Transaction (Legacy)");
+            
+            request.Gas = extraConfig.Gas;
+            request.GasPrice = extraConfig.MaxFeePerGas;
+        }
+        // Handle Parallax with legacy transactions
+        else if(networkType == EthereumNetworkType.Parallax || chainType == GethChainType.Parallax)
+        {
+            logger.Info(() => $"[{LogCategory}] Parallax Transaction (Legacy)");
+            
+            request.Gas = extraConfig.Gas;
+            request.GasPrice = extraConfig.MaxFeePerGas;
+        }
+        // Handle EIP-1559 transactions for supported chains
+        else if(extraPoolConfig?.ChainTypeOverride == "Ethereum" || extraPoolConfig?.ChainTypeOverride == "Main" || (extraPoolConfig?.ChainTypeOverride == "Ubiq") || extraPoolConfig?.ChainTypeOverride == "MainPow" || extraPoolConfig?.ChainTypeOverride == "EtherOne")
         {
             var maxPriorityFeePerGas = await rpcClient.ExecuteAsync<string>(logger, coin.RpcMethodPrefix + EC.MaxPriorityFeePerGas, ct);
             

@@ -6,7 +6,7 @@ public class BlockchainInfo
     public int Blocks { get; set; }
     public int Headers { get; set; }
     public string BestBlockHash { get; set; }
-    public Newtonsoft.Json.Linq.JToken Difficulty { get; set; }  // Changed from double to handle objects
+    public double Difficulty { get; set; }
     public long MedianTime { get; set; }
     public double VerificationProgress { get; set; }
     public bool Pruned { get; set; }

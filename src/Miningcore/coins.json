@@ -474,36 +474,6 @@
         "explorerTxLink": "https://explorer.btcnickel.com/tx/{0}",
         "explorerAccountLink": "https://explorer.btcnickel.com/address/{0}"
     },
-    "bitcoinii": {
-        "name": "BitcoinII",
-        "canonicalName": "BitcoinII",
-        "symbol": "BC2",
-        "family": "bitcoin",
-        "website": "https://bitcoin-ii.org/",
-        "github": "https://github.com/BitcoinII-Dev/BitcoinII/tree/main",
-        "market": "",
-        "twitter": "https://x.com/bc2org/",
-        "telegram": "https://t.me/+mc19GB_d5yo3Yjg5/",
-        "discord": "https://discord.gg/zUSkQHNVyG",
-        "coinbaseHasher": {
-            "hash": "sha256d"
-        },
-        "headerHasher": {
-            "hash": "sha256d"
-        },
-        "blockHasher": {
-            "hash": "reverse",
-            "args": [
-                {
-                    "hash": "sha256d"
-                }
-            ]
-        },
-        "coinbaseIgnoreAuxFlags": true,
-        "explorerBlockLink": "https://bitcoinii.ddns.net/explorer/block-height/{0}",
-        "explorerTxLink": "https://bitcoinii.ddns.net/explorer/tx/{0}",
-        "explorerAccountLink": "https://bitcoinii.ddns.net/explorer/address/{0}"
-    },
     "bitcore": {
         "name": "Bitcore",
         "canonicalName": "Bitcore",
@@ -594,77 +564,6 @@
         "explorerTxLink": "https://chainz.cryptoid.info/boli/tx.dws?{0}.htm",
         "explorerAccountLink": "https://chainz.cryptoid.info/boli/address.dws?{0}.htm"
     },
-    "briskcoin": {
-    "name": "Briskcoin",
-    "canonicalName": "Briskcoin",
-    "symbol": "BKC",
-    "family": "bitcoin",
-    "algorithm": "sha256d",
-    "rewardUnit": "BKC",
-    "blockTime": 600,
-    "addressTypes": {
-        "p2pkh": [ 0 ],
-        "p2sh": [ 5 ]
-    },
-    "bechPrefix": "bc",
-    "coinbaseHasher": { "hash": "sha256d" },
-    "headerHasher": { "hash": "sha256d" },
-    "blockHasher": {
-        "hash": "reverse",
-        "args": [ { "hash": "sha256d" } ]
-    },
-    "coinbaseIgnoreAuxFlags": true,
-    "explorerBlockLink": "https://explorer.briskcoin.org/block-height/{0}",
-    "explorerTxLink": "https://explorer.briskcoin.org/tx/{0}",
-    "explorerAccountLink": "https://explorer.briskcoin.org/address/{0}"
-},
-"bedrockcoin": {
-    "name": "BedrockCoin",
-    "canonicalName": "BedrockCoin",
-    "symbol": "BRK",
-    "family": "bitcoin",
-    "website": "https://bedrockcoin.org/",
-    "github": "https://github.com/bedrockcoin-project/bedrockcoin",
-    "market": "https://www.coingecko.com/en/coins/bedrockcoin",
-    "twitter": "https://twitter.com/bedrockcoin",
-    "telegram": "",
-    "discord": "https://discord.gg/bedrockcoin",
-    "coinbaseHasher": {
-        "hash": "sha256d"
-    },
-    "headerHasher": {
-        "hash": "scrypt",
-        "args": [
-            1024,
-            1
-        ]
-    },
-    "blockHasher": {
-        "hash": "reverse",
-        "args": [
-            {
-                "hash": "sha256d"
-            }
-        ]
-    },
-    "posBlockHasher": {
-        "hash": "reverse",
-        "args": [
-            {
-                "hash": "scrypt",
-                "args": [
-                    1024,
-                    1
-                ]
-            }
-        ]
-    },
-    "hasMWEB": true,
-    "shareMultiplier": 65536,
-    "explorerBlockLink": "https://explorer.bedrockcoin.org/block-height/{0}",
-    "explorerTxLink": "https://explorer.bedrockcoin.org/tx/{0}",
-    "explorerAccountLink": "https://explorer.bedrockcoin.org/address/{0}"
-  },
     "browncoin": {
         "name": "Browncoin",
         "symbol": "BRWN",
@@ -1758,56 +1657,6 @@
         "explorerTxLink": "https://chainz.cryptoid.info/lana/tx.dws?{0}.htm",
         "explorerAccountLink": "https://chainz.cryptoid.info/lana/address.dws?{0}.htm"
     },
-    "lazysloth": {
-    "name": "LazySloth",
-    "canonicalName": "LazySloth",
-    "symbol": "LZSL",
-    "family": "bitcoin",
-    "website": "https://lazyslothcoin.org/",
-    "github": "https://github.com/LazySlothOfficial/Source",
-    "market": "",
-    "twitter": "",
-    "telegram": "",
-    "discord": "",
-    "coinbaseHasher": {
-        "hash": "sha256d"
-    },
-    "headerHasher": {
-        "hash": "scrypt",
-        "args": [
-            1024,
-            1
-        ]
-    },
-    "blockHasher": {
-        "hash": "reverse",
-        "args": [
-            {
-                "hash": "sha256d"
-            }
-        ]
-    },
-    "posBlockHasher": {
-        "hash": "reverse",
-        "args": [
-            {
-                "hash": "scrypt",
-                "args": [
-                    1024,
-                    1
-                ]
-            }
-        ]
-    },
-    "hasMWEB": true,
-    "shareMultiplier": 65536,
-    "explorerBlockLink": "http://explorer.lazyslothcoin.org/block/{0}",
-    "explorerTxLink": "http://explorer.lazyslothcoin.org/tx/{0}",
-    "explorerAccountLink": "http://explorer.lazyslothcoin.org/address/{0}",
-    "gbtArgs": {
-        "rules": [ "segwit", "mweb" ]
-    }
-},
     "levocoin": {
         "name": "Levocoin",
         "symbol": "LEVO",
@@ -2928,55 +2777,6 @@
         "explorerTxLink": "https://explorer.kiirocoin.org/tx/{0}",
         "explorerAccountLink": "https://explorer.kiirocoin.org/address/{0}"
     },
-    "lazysloth": {
-    "name": "LazySloth",
-    "canonicalName": "LazySloth",
-    "symbol": "LZSL",
-    "family": "bitcoin",
-    "website": "https://lazysloth.org/",
-    "github": "https://github.com/LazySlothOfficial/Source",
-    "market": "https://www.coingecko.com/en/coins/lazysloth",
-    "twitter": "https://twitter.com/lazysloth",
-    "telegram": "",
-    "discord": "",
-
-    "coinbaseHasher": {
-        "hash": "sha256d"
-    },
-
-    "headerHasher": {
-        "hash": "scrypt",
-        "args": [ 1024, 1 ]
-    },
-
-    "blockHasher": {
-        "hash": "reverse",
-        "args": [
-            { "hash": "sha256d" }
-        ]
-    },
-
-    "posBlockHasher": {
-        "hash": "reverse",
-        "args": [
-            {
-                "hash": "scrypt",
-                "args": [ 1024, 1 ]
-            }
-        ]
-    },
-
-    "getBlockTemplateParams": [
-        { "rules": [ "segwit", "mweb" ] }
-    ],
-
-    "hasMWEB": true,
-    "shareMultiplier": 65536,
-
-    "explorerBlockLink": "https://explorer.lazysloth.org/block/$height$",
-    "explorerTxLink": "https://explorer.lazysloth.org/tx/{0}",
-    "explorerAccountLink": "https://explorer.lazysloth.org/address/{0}"
-   },
     "realichain": {
         "name": "Realichain",
         "symbol": "REALI",

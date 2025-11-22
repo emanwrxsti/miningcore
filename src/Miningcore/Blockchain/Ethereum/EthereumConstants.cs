@@ -95,6 +95,53 @@ public class PinkConstants
     public const decimal BaseRewardInitial = 1.0m;
 }
 
+// Thoreum block reward distribution
+// https://thoreum.org/
+public class ThoreumConstants
+{
+    public const ulong Range1End = 100000;
+    public const decimal Range1Reward = 10.0m;
+    public const ulong Range2End = 200000;
+    public const decimal Range2Reward = 8.0m;
+    public const ulong Range3End = 300000;
+    public const decimal Range3Reward = 6.0m;
+    public const ulong Range4End = 400000;
+    public const decimal Range4Reward = 4.0m;
+    public const ulong Range5End = 500000;
+    public const decimal Range5Reward = 2.0m;
+    public const ulong Range6End = 1000000;
+    public const decimal Range6Reward = 1.0m;
+    public const ulong Range7End = 2000000;
+    public const decimal Range7Reward = 0.5m;
+    public const ulong Range8End = 912000000;
+    public const decimal Range8Reward = 0.1m;
+}
+
+public class EticaConstants
+{
+    public const decimal BaseRewardInitial = 2.0m;
+}
+
+// Parallax block reward distribution
+// https://parallaxchain.org/
+public class ParallaxConstants
+{
+    public const ulong HalvingInterval = 210000;
+    public const decimal InitialBlockReward = 50.0m;
+}
+
+// XHash algorithm constants
+// XHash is a modified Ethash with epoch length 720, SHA3 instead of Keccak, and FNV-1 mixing
+public class XHashConstants
+{
+    public const ulong EpochLength = 720;
+    // Using same cache/dataset growth as Ethash for now
+    public const ulong DatasetBytesInit = 1073741824U; // 2**30
+    public const ulong DatasetBytesGrowth = 8388608U;  // 2**23
+    public const ulong CacheBytesInit = 16777216U; // 2**24
+    public const ulong CacheBytesGrowth = 131072U;  // 2**17
+}
+
 // Hypra
 // https://github.com/Rethereum-blockchain/open-rethereum-pool/blob/master/payouts/unlocker.go
 public class HypraConstants
@@ -159,6 +206,11 @@ public enum EthereumNetworkType
     Cortex = 21,
     Dolores = 43,
     Bernard = 42,
+    PowLayer = 70707,
+    ZapChain = 757,
+    Etica = 61803,
+    Thoreum = 357,
+    Parallax = 2110,
 
     Unknown = -1,
 }
@@ -180,6 +232,11 @@ public enum GethChainType
     Cortex = 21,
     Dolores = 43,
     Bernard = 42,
+    PowLayer = 70707,
+    ZapChain = 757,
+    Etica = 61803,
+    Thoreum = 357,
+    Parallax = 2110,
     
     Unknown = -1,
 }

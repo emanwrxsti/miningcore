@@ -26,7 +26,7 @@
 // 
 
 #pragma once
-#include <cstdint>
+
 #include <boost/mpl/vector.hpp>
 #include <boost/mpl/contains.hpp>
 #include <deque>
