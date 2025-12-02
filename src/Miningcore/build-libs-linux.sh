@@ -1,10 +1,12 @@
 #!/bin/bash
 
-OutDir=$1
+# Output path for native libraries
+OutDir=${1:-/tmp}
 
 export UNAME_S=$(uname -s)
 export UNAME_P=$(uname -m || uname -p)
 
+# CPU FLAGS FOR OPTIMIZED BUILDS
 AES=$(../Native/check_cpu.sh aes && echo -maes || echo)
 SSE2=$(../Native/check_cpu.sh sse2 && echo -msse2 || echo)
 SSE3=$(../Native/check_cpu.sh sse3 && echo -msse3 || echo)
@@ -27,6 +29,7 @@ HAVE_AVX512F=$(../Native/check_cpu.sh avx512f && echo -DHAVE_AVX512F || echo)
 
 export HAVE_FEATURE="$HAVE_AES $HAVE_SSE2 $HAVE_SSE3 $HAVE_SSSE3 $HAVE_PCLMUL $HAVE_AVX $HAVE_AVX2 $HAVE_AVX512F"
 
+### STATIC LIBRARIES FROM Native/ ###
 (cd ../Native/libmultihash && make clean && make) && mv ../Native/libmultihash/libmultihash.so "$OutDir"
 (cd ../Native/libbeamhash && make clean && make) && mv ../Native/libbeamhash/libbeamhash.so "$OutDir"
 (cd ../Native/libetchash && make clean && make) && mv ../Native/libetchash/libetchash.so "$OutDir"
@@ -47,9 +50,27 @@ export HAVE_FEATURE="$HAVE_AES $HAVE_SSE2 $HAVE_SSE3 $HAVE_SSSE3 $HAVE_PCLMUL $H
 (cd ../Native/libphihash && make clean && make) && mv ../Native/libphihash/libphihash.so "$OutDir"
 (cd ../Native/libsccpow && make clean && make) && mv ../Native/libsccpow/libsccpow.so "$OutDir"
 
-((cd /tmp && rm -rf secp256k1 && git clone https://github.com/bitcoin-ABC/secp256k1 && cd secp256k1 && git checkout 04fabb44590c10a19e35f044d11eb5058aac65b2 && mkdir build && cd build && cmake -GNinja .. -DCMAKE_C_FLAGS=-fPIC -DSECP256K1_ENABLE_MODULE_RECOVERY=OFF -DSECP256K1_ENABLE_COVERAGE=OFF -DSECP256K1_ENABLE_MODULE_SCHNORR=ON && ninja) && (cd ../Native/libnexapow && cp /tmp/secp256k1/build/libsecp256k1.a . && make clean && make) && mv ../Native/libnexapow/libnexapow.so "$OutDir")
-((cd /tmp && rm -rf RandomX && git clone https://github.com/tevador/RandomX && cd RandomX && git checkout tags/v1.2.1 && mkdir build && cd build && cmake -DARCH=native -DCMAKE_C_FLAGS=-Wa,--noexecstack -DCMAKE_CXX_FLAGS=-Wa,--noexecstack .. && make) && (cd ../Native/librandomx && cp /tmp/RandomX/build/librandomx.a . && make clean && make) && mv ../Native/librandomx/librandomx.so "$OutDir")
-((cd /tmp && rm -rf RandomARQ && git clone https://github.com/arqma/RandomARQ && cd RandomARQ && git checkout 3bcb6bafe63d70f8e6f78a0d431e71be2b638083 && mkdir build && cd build && cmake -DARCH=native -DCMAKE_C_FLAGS=-Wa,--noexecstack -DCMAKE_CXX_FLAGS=-Wa,--noexecstack .. && make) && (cd ../Native/librandomarq && cp /tmp/RandomARQ/build/librandomx.a . && make clean && make) && mv ../Native/librandomarq/librandomarq.so "$OutDir")
-((cd /tmp && rm -rf Panthera && git clone https://github.com/scala-network/Panthera && cd Panthera && git checkout cc7425f468d935ba328fba5bbb05f8227f4f22d7 && mkdir build && cd build && cmake -DARCH=native -DCMAKE_C_FLAGS=-Wa,--noexecstack -DCMAKE_CXX_FLAGS=-Wa,--noexecstack .. && make) && (cd ../Native/libpanthera && cp /tmp/Panthera/build/librandomx.a . && make clean && make) && mv ../Native/libpanthera/libpanthera.so "$OutDir")
-((cd /tmp && rm -rf RandomXSCash && git clone https://github.com/scashnetwork/RandomX RandomXSCash && cd RandomXSCash && git checkout 0b3e0ded68b95491516fe974e3db784ca2742ca7 && mkdir build && cd build && cmake -DARCH=native -DCMAKE_C_FLAGS=-Wa,--noexecstack -DCMAKE_CXX_FLAGS=-Wa,--noexecstack .. && make) && (cd ../Native/librandomxscash && cp /tmp/RandomXSCash/build/librandomx.a . && make clean && make) && mv ../Native/librandomxscash/librandomxscash.so "$OutDir")
-((cd /tmp && rm -rf xhash && git clone https://github.com/microstack-tech/xhash && cd xhash && mkdir build && cd build && cmake .. -DBUILD_SHARED_LIBS=ON -DXHASH_BUILD_XHASH=ON && cmake --build . -j$(nproc) && cp lib/xhash/libxhash.so /tmp/libxhash.so && cp lib/sha3/libsha3.so /tmp/libsha3.so) && cp /tmp/libxhash.so "$OutDir" && cp /tmp/libsha3.so "$OutDir")
+### NEXAPOW ###
+(cd /tmp && rm -rf secp256k1 && git clone https://github.com/bitcoin-ABC/secp256k1 && cd secp256k1 && git checkout 04fabb44590c10a19e35f044d11eb5058aac65b2 && mkdir build && cd build && cmake -GNinja .. -DCMAKE_C_FLAGS=-fPIC -DSECP256K1_ENABLE_MODULE_RECOVERY=OFF -DSECP256K1_ENABLE_COVERAGE=OFF -DSECP256K1_ENABLE_MODULE_SCHNORR=ON && ninja)
+(cd ../Native/libnexapow && cp /tmp/secp256k1/build/libsecp256k1.a . && make clean && make) && mv ../Native/libnexapow/libnexapow.so "$OutDir"
+
+### RANDOMX ###
+(cd /tmp && rm -rf RandomX && git clone https://github.com/tevador/RandomX && cd RandomX && git checkout tags/v1.2.1 && mkdir build && cd build && cmake -DARCH=native -DCMAKE_C_FLAGS="-Wa,--noexecstack" -DCMAKE_CXX_FLAGS="-Wa,--noexecstack" .. && make)
+(cd ../Native/librandomx && cp /tmp/RandomX/build/librandomx.a . && make clean && make) && mv ../Native/librandomx/librandomx.so "$OutDir"
+
+### RANDOMARQ FIXED (stdint.h patch) ###
+(cd /tmp && rm -rf RandomARQ && git clone https://github.com/arqma/RandomARQ && cd RandomARQ && git checkout 3bcb6bafe63d70f8e6f78a0d431e71be2b638083 && mkdir build && cd build && cmake -DARCH=native -DCMAKE_C_FLAGS="-include stdint.h" -DCMAKE_CXX_FLAGS="-include stdint.h" .. && make)
+(cd ../Native/librandomarq && cp /tmp/RandomARQ/build/librandomx.a . && make clean && make) && mv ../Native/librandomarq/librandomarq.so "$OutDir"
+
+### PANTHERA FIXED (stdint.h patch) ###
+(cd /tmp && rm -rf Panthera && git clone https://github.com/scala-network/Panthera && cd Panthera && git checkout cc7425f468d935ba328fba5bbb05f8227f4f22d7 && mkdir build && cd build && cmake -DARCH=native -DCMAKE_C_FLAGS="-include stdint.h" -DCMAKE_CXX_FLAGS="-include stdint.h" .. && make)
+(cd ../Native/libpanthera && cp /tmp/Panthera/build/librandomx.a . && make clean && make) && mv ../Native/libpanthera/libpanthera.so "$OutDir"
+
+### RANDOMX-SCASH FIXED ###
+(cd /tmp && rm -rf RandomXSCash && git clone https://github.com/scashnetwork/RandomX RandomXSCash && cd RandomXSCash && git checkout 0b3e0ded68b95491516fe974e3db784ca2742ca7 && mkdir build && cd build && cmake -DARCH=native -DCMAKE_C_FLAGS="-include stdint.h" -DCMAKE_CXX_FLAGS="-include stdint.h" .. && make)
+(cd ../Native/librandomxscash && cp /tmp/RandomXSCash/build/librandomx.a . && make clean && make) && mv ../Native/librandomxscash/librandomxscash.so "$OutDir"
+
+### XHASH ###
+(cd /tmp && rm -rf xhash && git clone https://github.com/microstack-tech/xhash && cd xhash && mkdir build && cd build && cmake .. -DBUILD_SHARED_LIBS=ON -DXHASH_BUILD_XHASH=ON && cmake --build . -j$(nproc) && cp lib/xhash/libxhash.so /tmp/libxhash.so && cp lib/sha3/libsha3.so /tmp/libsha3.so)
+cp /tmp/libxhash.so "$OutDir"
+cp /tmp/libsha3.so "$OutDir"

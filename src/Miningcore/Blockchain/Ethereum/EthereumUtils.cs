@@ -48,5 +48,10 @@ public static class EthereumUtils
         // Parallax detection by network ID - always check this first to override the chain type
         if(networkType == (EthereumNetworkType) 2110)
             chainType = GethChainType.Parallax;
+
+        // Parallax detection by network ID - always check this first to override the chain type
+        if(networkType == (EthereumNetworkType) 19049)
+            chainType = GethChainType.ThetaChain;
+
     }
 }

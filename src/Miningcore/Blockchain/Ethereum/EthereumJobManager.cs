@@ -576,6 +576,9 @@ public class EthereumJobManager : JobManagerBase<EthereumJob>
         // Display proper network type for ZapChain
         else if(chainType == GethChainType.ZapChain)
             BlockchainStats.NetworkType = "ZapChain";
+         // Display proper network type for ThetaChain
+        else if(chainType == GethChainType.ThetaChain)
+            BlockchainStats.NetworkType = "ThetaChain";
         // Display proper network type for Etica
         else if(chainType == GethChainType.Etica)
             BlockchainStats.NetworkType = "Etica";

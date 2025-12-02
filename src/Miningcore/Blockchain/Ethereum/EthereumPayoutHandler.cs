@@ -230,7 +230,7 @@ public class EthereumPayoutHandler : PayoutHandlerBase,
                                 var gasUsed = blockHashResponse.Response.GasUsed;
 
                                 var burnedFee = (decimal) 0;
-                                if(extraPoolConfig?.ChainTypeOverride == "Ethereum" || extraPoolConfig?.ChainTypeOverride == "Main" || extraPoolConfig?.ChainTypeOverride == "MainPow" || extraPoolConfig?.ChainTypeOverride == "Ubiq" || extraPoolConfig?.ChainTypeOverride == "EtherOne" || extraPoolConfig?.ChainTypeOverride == "Pink" || extraPoolConfig?.ChainTypeOverride == "Hypra" || networkType == EthereumNetworkType.PowLayer || chainType == GethChainType.PowLayer || networkType == EthereumNetworkType.ZapChain || chainType == GethChainType.ZapChain)
+                                if(extraPoolConfig?.ChainTypeOverride == "Ethereum" || extraPoolConfig?.ChainTypeOverride == "Main" || extraPoolConfig?.ChainTypeOverride == "MainPow" || extraPoolConfig?.ChainTypeOverride == "Ubiq" || extraPoolConfig?.ChainTypeOverride == "EtherOne" || extraPoolConfig?.ChainTypeOverride == "Pink" || extraPoolConfig?.ChainTypeOverride == "Hypra" || networkType == EthereumNetworkType.PowLayer || chainType == GethChainType.PowLayer || networkType == EthereumNetworkType.ZapChain || chainType == GethChainType.ZapChain || networkType == EthereumNetworkType.ThetaChain || chainType == GethChainType.ThetaChain)
                                     burnedFee = (baseGas * gasUsed / EthereumConstants.Wei);
 
                                 // For Etica: Store block hash immediately when confirming to help with future validation
@@ -590,21 +590,31 @@ public class EthereumPayoutHandler : PayoutHandlerBase,
                 // Beyond range 8, return 0.1 THR
                 return ThoreumConstants.Range8Reward;
 
-            case GethChainType.ZapChain:
-                // ZapChain block reward is 0.10 ZAP per block
-                return 0.10m;
+case GethChainType.Parallax:
+    // Parallax block reward follows Bitcoin's halving pattern
+    // Initial reward: 50 LAX, halves every 210,000 blocks
+    var halvingCount = Math.Floor((decimal)height / ParallaxConstants.HalvingInterval);
+    return ParallaxConstants.InitialBlockReward / (decimal)Math.Pow(2, (double)halvingCount);
 
-            case GethChainType.Etica:
-                return EticaConstants.BaseRewardInitial;
+case GethChainType.ThetaChain:
+    // ThetaChain variable block reward schedule
+    if (height <= 100_000) return 100.0m;
+    if (height <= 200_000) return 80.0m;
+    if (height <= 300_000) return 70.0m;
+    if (height <= 400_000) return 50.0m;
+    if (height <= 500_000) return 40.0m;
+    if (height <= 600_000) return 30.0m;
+    if (height <= 700_000) return 20.0m;
+    if (height <= 1_000_000) return 15.0m;
+    if (height <= 5_000_000) return 10.0m;
+    if (height <= 10_000_000) return 5.0m;
+    if (height <= 980_000_000) return 3.0m;
 
-            case GethChainType.Parallax:
-                // Parallax block reward follows Bitcoin's halving pattern
-                // Initial reward: 50 LAX, halves every 210,000 blocks
-                var halvingCount = Math.Floor((decimal) height / ParallaxConstants.HalvingInterval);
-                return ParallaxConstants.InitialBlockReward / (decimal) Math.Pow(2, (double) halvingCount);
+    return 0.1m;
 
-            default:
-                throw new Exception("Unable to determine block reward: Unsupported chain type");
+default:
+    throw new Exception("Unable to determine block reward: Unsupported chain type");
+
         }
     }
 
@@ -730,6 +740,14 @@ public class EthereumPayoutHandler : PayoutHandlerBase,
         else if(networkType == EthereumNetworkType.ZapChain || chainType == GethChainType.ZapChain)
         {
             logger.Info(() => $"[{LogCategory}] ZapChain Transaction (Legacy)");
+            
+            request.Gas = extraConfig.Gas;
+            request.GasPrice = extraConfig.MaxFeePerGas;
+        }
+                // Handle ThetaChain with legacy transactions (check this first!)
+        else if(networkType == EthereumNetworkType.ThetaChain || chainType == GethChainType.ThetaChain)
+        {
+            logger.Info(() => $"[{LogCategory}] ThetaChain Transaction (Legacy)");
             
             request.Gas = extraConfig.Gas;
             request.GasPrice = extraConfig.MaxFeePerGas;

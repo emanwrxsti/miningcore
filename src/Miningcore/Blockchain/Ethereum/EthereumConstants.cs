@@ -211,6 +211,7 @@ public enum EthereumNetworkType
     Etica = 61803,
     Thoreum = 357,
     Parallax = 2110,
+    ThetaChain = 19049,
 
     Unknown = -1,
 }
@@ -237,6 +238,7 @@ public enum GethChainType
     Etica = 61803,
     Thoreum = 357,
     Parallax = 2110,
+    ThetaChain = 19049,
     
     Unknown = -1,
 }
