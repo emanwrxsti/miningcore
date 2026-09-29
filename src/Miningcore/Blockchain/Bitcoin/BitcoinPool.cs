@@ -43,6 +43,17 @@ public class BitcoinPool : PoolBase
     protected BitcoinJobManager manager;
     private BitcoinTemplate coin;
 
+    // Serializes real Elektron job broadcasts and the fast local-work refresh,
+    // preventing old-tip local work from being sent after a clean new-block job.
+    private readonly SemaphoreSlim elektronWorkGate = new(1, 1);
+
+    private bool IsElektron =>
+        string.Equals(coin?.Symbol, "ELEK", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsRadiant =>
+        string.Equals(coin?.CanonicalName, "Radiant", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(coin?.Symbol, "RXD", StringComparison.OrdinalIgnoreCase);
+
     protected virtual async Task OnSubscribeAsync(StratumConnection connection, Timestamped<JsonRpcRequest> tsRequest)
     {
         var request = tsRequest.Value;
@@ -179,10 +190,49 @@ public class BitcoinPool : PoolBase
         var context = connection.ContextAs<BitcoinWorkerContext>();
         var job = manager.GetJobForStratum();
 
-        // update context
+        if(IsElektron)
+        {
+            // Local Elektron work does not require another GBT. Keep nTime tied
+            // to real wall-clock time while respecting template CurTime/MinTime.
+            var now = ((DateTimeOffset) clock.Now).ToUnixTimeSeconds();
+
+            var nTime = (uint) Math.Max(
+                Math.Max(
+                    (long) job.BlockTemplate.CurTime,
+                    (long) job.BlockTemplate.MinTime),
+                now);
+
+            BitcoinWorkerContext.ElektronWorkAssignment work;
+
+            lock(context)
+            {
+                // Keep the underlying GBT job available for actual validation
+                // and block construction.
+                context.AddJob(job, manager.maxActiveJobs, true, context.Difficulty);
+
+                // Allocate a unique Stratum work-id and rotate the four
+                // pool-controlled BIP320 bits.
+                work = context.AddElektronWork(
+                    job,
+                    manager.maxActiveJobs,
+                    context.Difficulty,
+                    nTime);
+            }
+
+            // GetJobParams returns a clone, so these worker-specific edits do
+            // not mutate Miningcore's shared manager job parameters.
+            var result = (object[]) job.GetJobParams(cleanJob, work.BaseVersion);
+
+            result[0] = work.WorkId;
+            result[7] = work.NTime.ToStringHex8();
+
+            return result;
+        }
+
+        // Normal Bitcoin-family behavior remains unchanged.
         lock(context)
         {
-            context.AddJob(job, manager.maxActiveJobs);
+            context.AddJob(job, manager.maxActiveJobs, !IsRadiant, context.Difficulty);
         }
 
         return job.GetJobParams(cleanJob);
@@ -203,8 +253,10 @@ public class BitcoinPool : PoolBase
 
             if(requestAge > maxShareAge)
             {
-                logger.Warn(() => $"[{connection.ConnectionId}] Dropping stale share submission request (server overloaded?)");
-                return;
+                // Do not silently discard a share merely because it waited in the
+                // server queue. Job lookup below decides whether the work is still
+                // valid for the current block epoch.
+                logger.Warn(() => $"[{connection.ConnectionId}] Delayed share submission ({requestAge.TotalSeconds:0.000}s); validating normally");
             }
 
             // check worker state
@@ -256,9 +308,16 @@ public class BitcoinPool : PoolBase
         {
             // telemetry
             PublishTelemetry(TelemetryCategory.Share, clock.Now - tsRequest.Timestamp.UtcDateTime, false);
+            PublishTelemetry(TelemetryCategory.ShareReject, ex.Code.ToString(), TimeSpan.Zero, false);
 
             // update client stats
             context.Stats.InvalidShares++;
+
+            if(ex.Code == StratumError.JobNotFound)
+                minerStatsRedis.RecordStale(poolConfig.Id, context);
+            else
+                minerStatsRedis.RecordRejected(poolConfig.Id, context);
+
             logger.Info(() => $"[{connection.ConnectionId}] Share rejected: {ex.Message} [{context.UserAgent}]");
 
             // banning
@@ -355,13 +414,20 @@ public class BitcoinPool : PoolBase
         IReadOnlyDictionary<string, JToken> extensionParams, Dictionary<string, object> result)
     {
         //var requestedBits = extensionParams[BitcoinStratumExtensions.VersionRollingBits].Value<int>();
-        var requestedMask = BitcoinConstants.VersionRollingPoolMask;
+
+        // Elektron reserves bits 13-16 for pool-side work rotation.
+        // ASIC version rolling must never touch those bits.
+        var poolMask = IsElektron ?
+            ElektronJob.MinerVersionBitsMask :
+            BitcoinConstants.VersionRollingPoolMask;
+
+        var requestedMask = poolMask;
 
         if(extensionParams.TryGetValue(BitcoinStratumExtensions.VersionRollingMask, out var requestedMaskValue))
             requestedMask = uint.Parse(requestedMaskValue.Value<string>(), NumberStyles.HexNumber);
 
         // Compute effective mask
-        context.VersionRollingMask = BitcoinConstants.VersionRollingPoolMask & requestedMask;
+        context.VersionRollingMask = poolMask & requestedMask;
 
         // enabled
         result[BitcoinStratumExtensions.VersionRolling] = true;
@@ -396,18 +462,73 @@ public class BitcoinPool : PoolBase
 
         logger.Info(() => $"Broadcasting job {((object[]) jobParams)[0]}");
 
-        await Guard(() => ForEachMinerAsync(async (connection, ct) =>
+        if(IsElektron)
+            await elektronWorkGate.WaitAsync();
+
+        try
         {
-            var context = connection.ContextAs<BitcoinWorkerContext>();
-            var minerJobParams = CreateWorkerJob(connection, (bool) ((object[]) jobParams)[^1]);
+            await Guard(() => ForEachMinerAsync(async (connection, ct) =>
+            {
+                var context = connection.ContextAs<BitcoinWorkerContext>();
 
-            // varDiff: if the client has a pending difficulty change, apply it now
-            if(context.ApplyPendingDifficulty())
-                await connection.NotifyAsync(BitcoinStratumMethods.SetDifficulty, new object[] { context.Difficulty });
+                // Apply vardiff before recording this worker/job assignment so the
+                // exact difficulty sent to the ASIC is retained with this job id.
+                if(context.ApplyPendingDifficulty())
+                    await connection.NotifyAsync(BitcoinStratumMethods.SetDifficulty,
+                        new object[] { context.Difficulty });
 
-            // send job
-            await connection.NotifyAsync(BitcoinStratumMethods.MiningNotify, minerJobParams);
-        }));
+                var minerJobParams = CreateWorkerJob(
+                    connection,
+                    (bool) ((object[]) jobParams)[^1]);
+
+                await connection.NotifyAsync(
+                    BitcoinStratumMethods.MiningNotify,
+                    minerJobParams);
+            }));
+        }
+
+        finally
+        {
+            if(IsElektron)
+                elektronWorkGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Elektron-only fast local work rotation.
+    ///
+    /// Reuses the manager's current cached GBT job. No daemon RPC is made.
+    /// Each worker gets a new Stratum work-id, real nTime and the next
+    /// pool-controlled BIP320 version state.
+    /// </summary>
+    private async Task OnElektronLocalWorkAsync()
+    {
+        if(!IsElektron)
+            return;
+
+        await elektronWorkGate.WaitAsync();
+
+        try
+        {
+            await Guard(() => ForEachMinerAsync(async (connection, ct) =>
+            {
+                var context = connection.ContextAs<BitcoinWorkerContext>();
+
+                if(!context.IsSubscribed || !context.IsAuthorized)
+                    return;
+
+                var minerJobParams = CreateWorkerJob(connection, false);
+
+                await connection.NotifyAsync(
+                    BitcoinStratumMethods.MiningNotify,
+                    minerJobParams);
+            }));
+        }
+
+        finally
+        {
+            elektronWorkGate.Release();
+        }
     }
 
     public override double HashrateFromShares(double shares, double interval)
@@ -455,6 +576,27 @@ public class BitcoinPool : PoolBase
 
             // start with initial blocktemplate
             await manager.Jobs.Take(1).ToTask(ct);
+
+            if(IsElektron)
+            {
+                // Elektron has a fixed consensus-sensitive coinbase and no
+                // extranonce2 search space. Give ASICs fresh header work every
+                // 500ms by rotating the pool-reserved BIP320 bits.
+                //
+                // This is intentionally RPC-free: CreateWorkerJob reuses the
+                // manager's current cached GBT job.
+                disposables.Add(
+                    Observable.Interval(TimeSpan.FromMilliseconds(500))
+                        .Select(_ => Observable.FromAsync(() =>
+                            Guard(
+                                () => OnElektronLocalWorkAsync(),
+                                ex => logger.Debug(() =>
+                                    $"{nameof(OnElektronLocalWorkAsync)}: {ex.Message}"))))
+                        .Concat()
+                        .Subscribe(
+                            _ => { },
+                            ex => logger.Debug(ex, nameof(OnElektronLocalWorkAsync))));
+            }
         }
 
         else

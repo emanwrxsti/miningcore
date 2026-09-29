@@ -30,6 +30,15 @@ public class CoinbaseAux
     public string Flags { get; set; }
 }
 
+public class CoinbaseRequiredOutput
+{
+    [JsonProperty("value")]
+    public long Value { get; set; }
+
+    [JsonProperty("scriptPubKey")]
+    public string ScriptPubKey { get; set; }
+}
+
 public class BlockTemplate
 {
     /// <summary>
@@ -63,6 +72,13 @@ public class BlockTemplate
     public uint CurTime { get; set; }
 
     /// <summary>
+    /// Minimum valid timestamp accepted by the daemon for this template.
+    /// Bitcoin-family daemons expose this field as lowercase "mintime".
+    /// </summary>
+    [JsonProperty("mintime")]
+    public uint MinTime { get; set; }
+
+    /// <summary>
     /// Compressed target of next block
     /// </summary>
     public string Bits { get; set; }
@@ -87,6 +103,20 @@ public class BlockTemplate
     /// </summary>
     [JsonProperty("default_witness_commitment")]
     public string DefaultWitnessCommitment { get; set; }
+
+    /// <summary>
+    /// Elektron Net: exact scriptSig supplied by getblocktemplate.
+    /// Must not be modified or extended.
+    /// </summary>
+    [JsonProperty("coinbase_script_sig_prefix")]
+    public string CoinbaseScriptSigPrefix { get; set; }
+
+    /// <summary>
+    /// Elektron Net: required outputs supplied by getblocktemplate.
+    /// Must be appended verbatim and in the supplied order.
+    /// </summary>
+    [JsonProperty("coinbase_required_outputs")]
+    public CoinbaseRequiredOutput[] CoinbaseRequiredOutputs { get; set; }
 
     /// <summary>
     /// CommunityAutonomous

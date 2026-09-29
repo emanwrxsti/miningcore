@@ -1,0 +1,14 @@
+Quantus fixes — corrected source package
+
+Start with QUANTUS-DEPLOYMENT.md and QUANTUS-VALIDATION.md.
+This ZIP is source code, not a precompiled replacement for your multi-coin server.
+The included source is already patched; quantus-fixes.patch is for review or use
+on a clean copy of the original uploaded repository only.
+
+Apply the additive PostgreSQL migration with payment processors stopped, configure
+the real node/CLI pins and public wallet addresses, then complete the documented
+acceptance checks. The example keeps automatic payouts disabled.
+
+Verified locally: 31 managed checks and 3 native tests passed; Release publish
+passed. Independent PostgreSQL sessions and live mining/payment acceptance remain
+required before production sends. Nothing was deployed and no funds were sent.

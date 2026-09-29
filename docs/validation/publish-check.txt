@@ -1,0 +1,4 @@
+PASS Linux Release publish includes real libquantuspow.so
+PASS published native ABI = 1
+PASS published native pinned PoW vector
+Native SHA-256: b0f34fceff36036f8e05d8dd568f943020301969e80df50af9b133ed75f32947

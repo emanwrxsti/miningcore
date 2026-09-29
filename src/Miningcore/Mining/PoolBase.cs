@@ -58,6 +58,7 @@ public abstract class PoolBase : StratumServer,
         this.statsRepo = statsRepo;
         this.mapper = mapper;
         this.nicehashService = nicehashService;
+        minerStatsRedis = ctx.Resolve<MinerStatsRedisService>();
     }
 
     protected PoolStats poolStats = new();
@@ -68,6 +69,7 @@ public abstract class PoolBase : StratumServer,
     protected readonly IStatsRepository statsRepo;
     protected readonly IMapper mapper;
     protected readonly NicehashService nicehashService;
+    protected readonly MinerStatsRedisService minerStatsRedis;
     protected readonly CompositeDisposable disposables = new();
     protected BlockchainStats blockchainStats;
     protected static readonly TimeSpan maxShareAge = TimeSpan.FromSeconds(6);
@@ -111,6 +113,50 @@ public abstract class PoolBase : StratumServer,
 
         // expect miner to establish communication within a certain time
         EnsureNoZombieClient(connection);
+    }
+
+    protected override void OnConnectionAuthorized(StratumConnection connection)
+    {
+        base.OnConnectionAuthorized(connection);
+
+        if(!minerStatsRedis.Enabled || connection?.Context == null)
+            return;
+
+        var context = connection.Context;
+        context.RedisSessionId = minerStatsRedis.CreateSessionId(connection.ConnectionId);
+        minerStatsRedis.RecordConnected(poolConfig.Id, context);
+    }
+
+    protected override void OnConnectionTerminated(StratumConnection connection)
+    {
+        base.OnConnectionTerminated(connection);
+
+        if(!minerStatsRedis.Enabled || connection?.Context == null)
+            return;
+
+        var context = connection.Context;
+
+        if(context.IsAuthorized && !string.IsNullOrWhiteSpace(context.RedisSessionId))
+            minerStatsRedis.RecordDisconnected(poolConfig.Id, context);
+    }
+
+    private async Task RunRedisSessionHeartbeatAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(minerStatsRedis.SessionHeartbeatInterval);
+
+        while(await timer.WaitForNextTickAsync(ct))
+        {
+            foreach(var connection in connections.Values)
+            {
+                if(!connection.IsAlive || connection.Context == null)
+                    continue;
+
+                var context = connection.Context;
+
+                if(context.IsAuthorized && !string.IsNullOrWhiteSpace(context.RedisSessionId))
+                    minerStatsRedis.RecordHeartbeat(poolConfig.Id, context);
+            }
+        }
     }
 
     private void EnsureNoZombieClient(StratumConnection connection)
@@ -161,6 +207,7 @@ public abstract class PoolBase : StratumServer,
                 logger.Info(() => $"[{connection.ConnectionId}] VarDiff update to {Math.Round(newDiff.Value, 3)}{(idle ? " [IDLE]" : "")}");
 
                 await OnVarDiffUpdateAsync(connection, newDiff.Value, ct);
+                minerStatsRedis.RecordRetarget(poolConfig.Id, context, newDiff.Value);
             }
         }
     }
@@ -344,6 +391,9 @@ public abstract class PoolBase : StratumServer,
 
         if(varDiffEnabled)
             tasks.Add(RunVardiffIdleUpdaterAsync(poolConfig.VardiffIdleSweepInterval ?? 30, ct));
+
+        if(minerStatsRedis.Enabled)
+            tasks.Add(RunRedisSessionHeartbeatAsync(ct));
 
         await Task.WhenAll(tasks);
     }

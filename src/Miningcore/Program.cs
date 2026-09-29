@@ -299,6 +299,9 @@ public class Program : BackgroundService
         services.AddHostedService<NotificationService>();
         services.AddHostedService<BtStreamReceiver>();
 
+        if(clusterConfig.Persistence?.Redis?.Enabled == true)
+            services.AddHostedService<MinerStatsRedisService>(sp => sp.GetRequiredService<MinerStatsRedisService>());
+
         // Share processing
         if(clusterConfig.ShareRelay == null)
         {
@@ -536,7 +539,7 @@ public class Program : BackgroundService
     {
         var app = new CommandLineApplication
         {
-            FullName = "Miningcore",
+            FullName = "F4Pool",
             ShortVersionGetter = GetVersion,
             LongVersionGetter = GetVersion
         };
@@ -625,22 +628,25 @@ public class Program : BackgroundService
     private static void Logo()
     {
         Console.WriteLine(@"
- ███╗   ███╗██╗███╗   ██╗██╗███╗   ██╗ ██████╗  ██████╗ ██████╗ ██████╗ ███████╗
- ████╗ ████║██║████╗  ██║██║████╗  ██║██╔════╝ ██╔════╝██╔═══██╗██╔══██╗██╔════╝
- ██╔████╔██║██║██╔██╗ ██║██║██╔██╗ ██║██║  ███╗██║     ██║   ██║██████╔╝█████╗
- ██║╚██╔╝██║██║██║╚██╗██║██║██║╚██╗██║██║   ██║██║     ██║   ██║██╔══██╗██╔══╝
- ██║ ╚═╝ ██║██║██║ ╚████║██║██║ ╚████║╚██████╔╝╚██████╗╚██████╔╝██║  ██║███████╗
+ ███████╗██╗  ██╗██████╗  ██████╗  ██████╗ ██╗
+ ██╔════╝██║  ██║██╔══██╗██╔═══██╗██╔═══██╗██║
+ █████╗  ███████║██████╔╝██║   ██║██║   ██║██║
+ ██╔══╝  ╚════██║██╔═══╝ ██║   ██║██║   ██║██║
+ ██║          ██║██║     ╚██████╔╝╚██████╔╝███████╗
+ ╚═╝          ╚═╝╚═╝      ╚═════╝  ╚═════╝ ╚══════╝
 ");
-        Console.WriteLine(" https://github.com/emanwrxsti/miningcore\n");
-        Console.WriteLine(" Donate to one of these addresses to support the project:\n");
-        Console.WriteLine(" BC2   - bc1qlazds8fgy44w77eehqh6m4lgr6dcgqpggz5234");
-        Console.WriteLine(" BKC   - bc1q3jfh0jmftxmaw9q9akfysujrr6rhgzrsxrr8gk");
-        Console.WriteLine(" SCASH - scash1qfjgejpk9zku6ltw59a7025q46v9seen4zlsqjs");
-        Console.WriteLine(" RXD   - 1C6SXZbxZUV7uXS7kCyREg58okThWvHV3n");
-        Console.WriteLine(" VTC   - VwWRQApZ9VioxFdWtmQra2aRzZQos6M4vu");
-        Console.WriteLine(" ALPH  - 1FuiTd5TU17kSERfbYU2htzZpoAw34CS82wwJ6T35PD24");
-        Console.WriteLine();
 
+        Console.WriteLine(" F4Pool Mining Pool");
+        Console.WriteLine(" https://f4pool.com");
+        Console.WriteLine(" https://github.com/emanwrxsti/mc1\n");
+
+        Console.WriteLine(" Support F4Pool:\n");
+
+        Console.WriteLine(" ALPH  - 1MUEfnNdrbm75DBMmbUA6v4tMpspKGg879NTKid3WsLz");
+        Console.WriteLine(" RXD   - 1FTYNR213wX7X94qJeFXqirBkFgQrzMX8H");
+        Console.WriteLine(" SCASH - scash1qfjgejpk9zku6ltw59a7025q46v9seen4zlsqjs");
+
+        Console.WriteLine();
     }
 
     private static void ConfigureLogging()

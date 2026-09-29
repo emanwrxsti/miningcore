@@ -27,4 +27,3 @@ public class EthereumPoolPaymentProcessingConfigExtra
     /// </summary>
     public uint BlockSearchOffset { get; set; } = 50;
 }
-

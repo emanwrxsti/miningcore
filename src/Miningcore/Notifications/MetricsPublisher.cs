@@ -34,6 +34,8 @@ public class MetricsPublisher : BackgroundService
     private Summary hashComputationSummary;
     private Gauge poolConnectionsGauge;
     private Gauge poolHashrateGauge;
+    private Summary jobUpdateDurationSummary;
+    private Counter shareRejectCounter;
 
     private void CreateMetrics()
     {
@@ -86,6 +88,22 @@ public class MetricsPublisher : BackgroundService
         {
             LabelNames = new[] { "algo" }
         });
+
+        jobUpdateDurationSummary = Metrics.CreateSummary(
+            "miningcore_job_update_execution_time",
+            "Bitcoin job update execution time in ms",
+            new SummaryConfiguration
+            {
+                LabelNames = new[] { "pool", "via" }
+            });
+
+        shareRejectCounter = Metrics.CreateCounter(
+            "miningcore_share_rejects_total",
+            "Rejected shares by reason",
+            new CounterConfiguration
+            {
+                LabelNames = new[] { "pool", "reason" }
+            });
     }
 
     private void OnTelemetryEvent(TelemetryEvent msg)
@@ -122,6 +140,18 @@ public class MetricsPublisher : BackgroundService
 
             case TelemetryCategory.Hash:
                 hashComputationSummary.WithLabels(msg.GroupId).Observe(msg.Elapsed.TotalMilliseconds);
+                break;
+
+            case TelemetryCategory.JobUpdate:
+                jobUpdateDurationSummary
+                    .WithLabels(msg.GroupId, msg.Info ?? "unknown")
+                    .Observe(msg.Elapsed.TotalMilliseconds);
+                break;
+
+            case TelemetryCategory.ShareReject:
+                shareRejectCounter
+                    .WithLabels(msg.GroupId, msg.Info ?? "unknown")
+                    .Inc();
                 break;
         }
     }

@@ -569,24 +569,7 @@ public class EthereumJobManager : JobManagerBase<EthereumJob>
 
         // update stats
         BlockchainStats.RewardType = "POW";
-        
-        // Display proper network type for PowLayer
-        if(chainType == GethChainType.PowLayer)
-            BlockchainStats.NetworkType = "PowLayer";
-        // Display proper network type for ZapChain
-        else if(chainType == GethChainType.ZapChain)
-            BlockchainStats.NetworkType = "ZapChain";
-        // Display proper network type for Etica
-        else if(chainType == GethChainType.Etica)
-            BlockchainStats.NetworkType = "Etica";
-        // Display proper network type for Thoreum
-        else if(chainType == GethChainType.Thoreum)
-            BlockchainStats.NetworkType = "Thoreum";
-        // Display proper network type for Parallax
-        else if(chainType == GethChainType.Parallax)
-            BlockchainStats.NetworkType = "Parallax";
-        else
-            BlockchainStats.NetworkType = $"{chainType}-{networkType}";
+        BlockchainStats.NetworkType = $"{chainType}-{networkType}";
 
         await UpdateNetworkStatsAsync(ct);
 

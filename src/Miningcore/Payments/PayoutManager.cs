@@ -167,6 +167,10 @@ public class PayoutManager : BackgroundService
 
                 await cf.RunTx(async (con, tx) =>
                 {
+                    if(handler is IBlockPayoutGuard guard &&
+                        !await guard.TryBeginBlockPaymentAsync(con, tx, block, ct))
+                        return;
+
                     if(!block.Effort.HasValue)  // fill block effort if empty
                         await CalculateBlockEffortAsync(pool, poolConfig, block, handler, ct);
 

@@ -382,6 +382,9 @@
       "properties": {
         "postgres": {
           "$ref": "#/definitions/PostgresConfig"
+        },
+        "redis": {
+          "$ref": "#/definitions/RedisConfig"
         }
       }
     },
@@ -535,6 +538,7 @@
             "PROP",
             "SOLO",
             "PPS",
+            "FPPS",
             "PPBS"
           ]
         },
@@ -875,6 +879,68 @@
         },
         "variancePercent": {
           "type": "number"
+        }
+      }
+    },
+    "RedisConfig": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "connectionString": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "database": {
+          "type": "integer"
+        },
+        "keyPrefix": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retentionDays": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sessionResetMinutes": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "nodeName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sessionHeartbeatSeconds": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sessionTimeoutSeconds": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "disconnectedRetentionMinutes": {
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       }
     }

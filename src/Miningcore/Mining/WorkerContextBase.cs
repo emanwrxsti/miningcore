@@ -24,6 +24,11 @@ public class WorkerContextBase
     public bool IsSubscribed { get; set; }
 
     /// <summary>
+    /// Globally unique Redis live-stats session id for this Stratum socket.
+    /// </summary>
+    public string RedisSessionId { get; set; }
+
+    /// <summary>
     /// Difficulty assigned to this worker, either static or updated through VarDiffManager
     /// </summary>
     public double Difficulty { get; set; }

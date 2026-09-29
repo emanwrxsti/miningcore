@@ -53,6 +53,11 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
     protected Network network;
     protected IDestination poolAddressDestination;
 
+    // Serialize job updates while preventing routine polling from building a
+    // queue ahead of critical ZMQ/new-block notifications.
+    private readonly SemaphoreSlim jobUpdateLock = new(1, 1);
+    private int pendingHighPriorityJobUpdates;
+
     protected virtual object[] GetBlockTemplateParams()
     {
         return new object[]
@@ -62,6 +67,114 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
                 rules = new[] {"segwit"},
             }
         };
+    }
+
+    private static bool IsHighPriorityJobUpdate(string via)
+    {
+        return via == JobRefreshBy.PubSub ||
+            via == JobRefreshBy.BlockFound ||
+            via == JobRefreshBy.BlockTemplateStream ||
+            via == JobRefreshBy.BlockTemplateStreamRefresh;
+    }
+
+    private async Task<object> ProcessJobUpdateAsync(
+        CancellationToken ct,
+        (bool Force, string Via, string Data) trigger)
+    {
+        // Includes scheduler wait + getblocktemplate + job construction.
+        // For ZMQ this gives us a useful approximation of block-event to
+        // completed Stratum job-generation latency.
+        var jobUpdateSw = System.Diagnostics.Stopwatch.StartNew();
+
+        var highPriority = IsHighPriorityJobUpdate(trigger.Via);
+        var lockTaken = false;
+
+        if(highPriority)
+        {
+            Interlocked.Increment(ref pendingHighPriorityJobUpdates);
+
+            try
+            {
+                await jobUpdateLock.WaitAsync(ct);
+                lockTaken = true;
+            }
+
+            catch(OperationCanceledException)
+            {
+                return null;
+            }
+
+            finally
+            {
+                Interlocked.Decrement(ref pendingHighPriorityJobUpdates);
+            }
+        }
+
+        else
+        {
+            // Routine POLL/POLL-R/INIT work must never build a backlog in
+            // front of ZMQ or block-found processing.
+            if(Volatile.Read(ref pendingHighPriorityJobUpdates) > 0)
+            {
+                logger.Trace(() =>
+                    $"Skipping job update [{trigger.Via}] because a high-priority update is pending");
+
+                return null;
+            }
+
+            if(!jobUpdateLock.Wait(0))
+            {
+                logger.Trace(() =>
+                    $"Skipping job update [{trigger.Via}] because another job update is already running");
+
+                return null;
+            }
+
+            lockTaken = true;
+
+            // A ZMQ notification may have arrived immediately after we acquired
+            // the lock. Yield this routine update rather than making it wait.
+            if(Volatile.Read(ref pendingHighPriorityJobUpdates) > 0)
+            {
+                jobUpdateLock.Release();
+                lockTaken = false;
+
+                logger.Trace(() =>
+                    $"Skipping job update [{trigger.Via}] in favor of pending high-priority update");
+
+                return null;
+            }
+        }
+
+        try
+        {
+            var result = await UpdateJob(
+                ct,
+                trigger.Force,
+                trigger.Via,
+                trigger.Data);
+
+            messageBus.SendTelemetry(
+                poolConfig.Id,
+                TelemetryCategory.JobUpdate,
+                trigger.Via ?? "unknown",
+                jobUpdateSw.Elapsed,
+                true);
+
+            if(result.IsNew)
+                hasInitialBlockTemplate = true;
+
+            if(result.IsNew || result.Force)
+                return GetJobParamsForStratum(result.IsNew);
+
+            return null;
+        }
+
+        finally
+        {
+            if(lockTaken)
+                jobUpdateLock.Release();
+        }
     }
 
     protected virtual void SetupJobUpdates(CancellationToken ct)
@@ -178,15 +291,9 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
         }
 
         Jobs = triggers.Merge()
-            .Select(x => Observable.FromAsync(() => UpdateJob(ct, x.Force, x.Via, x.Data)))
-            .Concat()
-            .Where(x => x.IsNew || x.Force)
-            .Do(x =>
-            {
-                if(x.IsNew)
-                    hasInitialBlockTemplate = true;
-            })
-            .Select(x => GetJobParamsForStratum(x.IsNew))
+            .Select(x => Observable.FromAsync(() => ProcessJobUpdateAsync(ct, x)))
+            .Merge()
+            .Where(x => x != null)
             .Publish()
             .RefCount();
     }
@@ -578,6 +685,9 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
             case BitcoinAddressType.BCash:
                 return BitcoinUtils.BCashAddressToDestination(poolConfig.Address, network);
 
+            case BitcoinAddressType.CashAddr:
+                return BitcoinUtils.CashAddrToDestination(poolConfig.Address, extraPoolConfig?.CashAddrPrefix);
+
             case BitcoinAddressType.Litecoin:
                 return BitcoinUtils.LitecoinAddressToDestination(poolConfig.Address, network);
 
@@ -605,8 +715,9 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
         extraPoolConfig = pc.Extra.SafeExtensionDataAs<BitcoinPoolConfigExtra>();
         extraPoolPaymentProcessingConfig = pc.PaymentProcessing?.Extra?.SafeExtensionDataAs<BitcoinPoolPaymentProcessingConfigExtra>();
 
-        if(extraPoolConfig?.MaxActiveJobs.HasValue == true)
-            maxActiveJobs = extraPoolConfig.MaxActiveJobs.Value;
+        var configuredMaxActiveJobs = extraPoolConfig?.MaxActiveJobs ?? extraPoolConfig?.MaxActiveJobsPerMiner;
+        if(configuredMaxActiveJobs.HasValue && configuredMaxActiveJobs.Value > 0)
+            maxActiveJobs = configuredMaxActiveJobs.Value;
 
         hasLegacyDaemon = extraPoolConfig?.HasLegacyDaemon == true;
 

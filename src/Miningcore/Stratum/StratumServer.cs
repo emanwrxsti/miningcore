@@ -179,6 +179,17 @@ public abstract class StratumServer
         Debug.Assert(result);
 
         PublishTelemetry(TelemetryCategory.Connections, TimeSpan.Zero, true, connections.Count);
+
+        if(result)
+            OnConnectionTerminated(connection);
+    }
+
+    protected virtual void OnConnectionAuthorized(StratumConnection connection)
+    {
+    }
+
+    protected virtual void OnConnectionTerminated(StratumConnection connection)
+    {
     }
 
     protected abstract void OnConnect(StratumConnection connection, IPEndPoint portItem1);
@@ -196,8 +207,14 @@ public abstract class StratumServer
         logger.Debug(() => $"[{connection.ConnectionId}] Dispatching request '{request.Method}' [{request.Id}]");
 
         var tsRequest = new Timestamped<JsonRpcRequest>(request, clock.Now);
+        var wasAuthorized = connection.Context?.IsAuthorized == true;
 
         await OnRequestAsync(connection, tsRequest, ct);
+
+        var isAuthorized = connection.Context?.IsAuthorized == true;
+
+        if(!wasAuthorized && isAuthorized)
+            OnConnectionAuthorized(connection);
 
         PublishTelemetry(TelemetryCategory.StratumRequest, request.Method, clock.Now - tsRequest.Timestamp);
     }

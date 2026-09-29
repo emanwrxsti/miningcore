@@ -1,4 +1,5 @@
 using AutoMapper;
+using AutoMapper.Internal;
 using Miningcore.Blockchain;
 using Miningcore.Configuration;
 using Miningcore.Persistence.Model;
@@ -14,6 +15,9 @@ public class AutoMapperProfile : Profile
 
     public AutoMapperProfile()
     {
+        // Application mitigation for CVE-2026-32933 on the pinned AutoMapper 12.
+        this.Internal().ForAllMaps((_, expression) => expression.MaxDepth(64));
+
         // Fix for Automapper 11 which chokes on recursive objects such as JToken
         CreateMap<JToken, JToken>().ConvertUsing(x=> x);
 

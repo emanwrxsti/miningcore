@@ -1,0 +1,27 @@
+{
+  "clusterName": "F4Pool",
+  "instanceId": 1,
+  "persistence": {
+    "postgres": {
+      "host": "127.0.0.1",
+      "port": 5432,
+      "user": "miningcore",
+      "password": "REPLACE_ME",
+      "database": "miningcore",
+      "commandTimeout": 6000
+    },
+    "redis": {
+      "enabled": true,
+      "connectionString": "10.20.30.10:6379,password=REPLACE_ME,abortConnect=false",
+      "database": 0,
+      "keyPrefix": "miningcore:minerstats",
+      "retentionDays": 30,
+      "sessionResetMinutes": 5,
+      "nodeName": "us",
+      "sessionHeartbeatSeconds": 30,
+      "sessionTimeoutSeconds": 120,
+      "disconnectedRetentionMinutes": 30
+    }
+  },
+  "pools": []
+}

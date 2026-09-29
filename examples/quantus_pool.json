@@ -1,0 +1,23 @@
+{
+  "logging": { "level": "info", "enableConsoleLog": true },
+  "persistence": { "postgres": { "host": "127.0.0.1", "port": 5432, "database": "miningcore", "user": "miningcore", "password": "REPLACE_DATABASE_PASSWORD" } },
+  "paymentProcessing": { "enabled": true, "interval": 600 },
+  "pools": [{
+    "id": "quantus-pplns", "enabled": true, "coin": "quantus", "address": "REPLACE_PUBLIC_PAYOUT_ADDRESS",
+    "enableInternalStratum": false, "tlsPfxPath": "/opt/miningcore/secrets/pool.pfx",
+    "ports": { "3333": { "listenAddress": "0.0.0.0", "difficulty": 1000 } },
+    "daemons": [{ "host": "127.0.0.1", "port": 9944, "minerPort": 9833,
+      "authTokenPath": "/opt/miningcore/secrets/node-miner-token",
+      "tlsFingerprintPath": "/opt/miningcore/secrets/node-miner-fingerprint",
+      "network": "REPLACE_NETWORK_NAME", "maxJobAgeSeconds": 180 }],
+    "paymentProcessing": {
+      "enabled": true, "minimumPayment": 1, "payoutScheme": "PPLNS", "payoutSchemeConfig": { "factor": 2 },
+      "enablePayouts": false, "minimumConfirmations": 20, "candidateSearchWindow": 32,
+      "cliPath": "/opt/quantus/bin/quantus", "cliSha256": "REPLACE_EXECUTABLE_SHA256",
+      "genesisHash": "REPLACE_TRUSTED_GENESIS_HASH", "nodeUrl": "ws://127.0.0.1:9944/",
+      "walletName": "pool-payouts", "passwordFile": "/opt/miningcore/secrets/wallet-password",
+      "wormholeAddress": "REPLACE_PUBLIC_WORMHOLE_ADDRESS", "batchSize": 50, "cliTimeoutSeconds": 1800,
+      "collectRewards": false, "wormholeIndex": 0, "subsquidUrl": "https://sub2.quantus.com/v1/graphql"
+    }
+  }]
+}

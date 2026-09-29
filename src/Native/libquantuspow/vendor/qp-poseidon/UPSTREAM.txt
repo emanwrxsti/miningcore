@@ -1,0 +1,3 @@
+https://github.com/Quantus-Network/qp-poseidon
+commit 0117e2ca7f46a07d86a43385b5079ac6aaadaadc
+Source files unmodified. Minimal Cargo manifest omits upstream development dependencies.

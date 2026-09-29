@@ -1,0 +1,57 @@
+name: Quantus validation
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  quantus:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: quantus_test
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_DB: quantus_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U quantus_test -d quantus_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      QUANTUS_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=quantus_test;Username=quantus_test;Password=test-only;Pooling=false
+      QUANTUS_REQUIRE_INTEGRATION: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Install native build and QUIC dependencies
+        run: |
+          curl --fail --location https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb -o /tmp/packages-microsoft-prod.deb
+          sudo dpkg -i /tmp/packages-microsoft-prod.deb
+          sudo apt-get update
+          sudo apt-get install -y build-essential libmsquic
+          rustup toolchain install 1.90.0 --profile minimal
+          rustup override set 1.90.0
+      - name: Verify native consensus hashing
+        run: cargo test --manifest-path src/Native/libquantuspow/Cargo.toml --locked --offline
+      - name: Verify Quantus with PostgreSQL and real QUIC
+        run: >-
+          dotnet test src/Miningcore.Tests/Miningcore.Tests.csproj
+          --configuration Release -p:SkipNativeLibs=true -p:DisableGitVersionTask=true
+          --filter FullyQualifiedName~Miningcore.Tests.Blockchain.Quantus
+          --logger "trx;LogFileName=quantus.trx" --results-directory TestResults
+      - name: Verify publish includes native library
+        run: |
+          dotnet publish src/Miningcore/Miningcore.csproj -c Release -o /tmp/quantus-publish -p:SkipNativeLibs=true -p:DisableGitVersionTask=true
+          test -s /tmp/quantus-publish/libquantuspow.so
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quantus-test-results
+          path: TestResults

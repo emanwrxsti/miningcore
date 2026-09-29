@@ -1,3 +1,4 @@
+using System.Globalization;
 using Autofac;
 using Miningcore.Blockchain.Bitcoin.Configuration;
 using Miningcore.Blockchain.Bitcoin.DaemonResponses;
@@ -28,10 +29,33 @@ public class BitcoinJobManager : BitcoinJobManagerBase<BitcoinJob>
     {
     }
 
+    private const int RadiantMaxActiveJobs = 50;
+    private const int RadiantFallbackJobChecks = 8;
     private BitcoinTemplate coin;
+
+    private bool IsElektron =>
+        string.Equals(coin?.Symbol, "ELEK", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsRadiant =>
+        string.Equals(coin?.CanonicalName, "Radiant", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(coin?.Symbol, "RXD", StringComparison.OrdinalIgnoreCase);
 
     protected override object[] GetBlockTemplateParams()
     {
+        if(IsElektron)
+        {
+            return new object[]
+            {
+                new
+                {
+                    rules = new[] { "segwit" },
+                    mode = "template",
+                    capabilities = new[] { "serverlist", "proposal" },
+                    coinbaseaddress = poolConfig.Address
+                }
+            };
+        }
+
         var result = base.GetBlockTemplateParams();
         
         if(coin.HasMWEB)
@@ -91,8 +115,15 @@ public class BitcoinJobManager : BitcoinJobManagerBase<BitcoinJob>
 
     protected async Task<RpcResponse<BlockTemplate>> GetBlockTemplateAsync(CancellationToken ct)
     {
+        // Elektron's UTXO attestation is generated against the exact
+        // coinbaseaddress supplied to getblocktemplate. Do not allow a
+        // generic GBTArgs override to bypass it.
+        var args = IsElektron
+            ? (object) GetBlockTemplateParams()
+            : extraPoolConfig?.GBTArgs ?? (object) GetBlockTemplateParams();
+
         var result = await rpc.ExecuteAsync<BlockTemplate>(logger,
-            BitcoinCommands.GetBlockTemplate, ct, extraPoolConfig?.GBTArgs ?? (object) GetBlockTemplateParams());
+            BitcoinCommands.GetBlockTemplate, ct, args);
 
         return result;
     }
@@ -106,7 +137,10 @@ public class BitcoinJobManager : BitcoinJobManagerBase<BitcoinJob>
 
     private BitcoinJob CreateJob()
     {
-        return new();
+        if(IsElektron)
+            return new ElektronJob();
+
+        return new BitcoinJob();
     }
 
     protected override void PostChainIdentifyConfigure()
@@ -220,12 +254,28 @@ public class BitcoinJobManager : BitcoinJobManagerBase<BitcoinJob>
         extraPoolConfig = pc.Extra.SafeExtensionDataAs<BitcoinPoolConfigExtra>();
         extraPoolPaymentProcessingConfig = pc.PaymentProcessing?.Extra?.SafeExtensionDataAs<BitcoinPoolPaymentProcessingConfigExtra>();
 
-        if(extraPoolConfig?.MaxActiveJobs.HasValue == true)
-            maxActiveJobs = extraPoolConfig.MaxActiveJobs.Value;
+        var configuredMaxActiveJobs = extraPoolConfig?.MaxActiveJobs ?? extraPoolConfig?.MaxActiveJobsPerMiner;
+        if(configuredMaxActiveJobs.HasValue && configuredMaxActiveJobs.Value > 0)
+            maxActiveJobs = configuredMaxActiveJobs.Value;
 
         hasLegacyDaemon = extraPoolConfig?.HasLegacyDaemon == true;
 
         base.Configure(pc, cc);
+
+        // Bitcoin ASICs may return buffered shares for older templates from the
+        // same block. Keep more same-epoch jobs by default, while allowing an
+        // explicit pool configuration to override this value.
+        if(!configuredMaxActiveJobs.HasValue &&
+            (string.Equals(coin?.CanonicalName, "Bitcoin", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(coin?.Symbol, "BTC", StringComparison.OrdinalIgnoreCase)))
+        {
+            maxActiveJobs = 16;
+        }
+
+        // IceRiver RXD firmware may submit an old solution under the newest work id.
+        // Keep enough historical work to recover the correct template reliably.
+        if(IsRadiant)
+            maxActiveJobs = RadiantMaxActiveJobs;
     }
 
     public virtual object[] GetSubscriberData(StratumConnection worker)
@@ -234,10 +284,28 @@ public class BitcoinJobManager : BitcoinJobManagerBase<BitcoinJob>
 
         var context = worker.ContextAs<BitcoinWorkerContext>();
 
-        // assign unique ExtraNonce1 to worker (miner)
+        // Keep a unique internal connection/session id.
         context.ExtraNonce1 = extraNonceProvider.Next();
 
-        // setup response data
+        if(IsElektron)
+        {
+            // Elektron coinbase must remain byte-identical to the
+            // getblocktemplate coinbase commitment.
+            //
+            // Normal Stratum ASICs must receive:
+            //   extranonce1 = ""
+            //   extranonce2_size = 0
+            //
+            // The internal context.ExtraNonce1 above is retained only
+            // for connection/share tracking and duplicate detection.
+            return new object[]
+            {
+                string.Empty,
+                0,
+            };
+        }
+
+        // Standard Bitcoin-family extranonce behavior.
         var responseData = new object[]
         {
             context.ExtraNonce1,
@@ -245,6 +313,51 @@ public class BitcoinJobManager : BitcoinJobManagerBase<BitcoinJob>
         };
 
         return responseData;
+    }
+
+    private static bool IsRecoverableRadiantWorkIdError(StratumException ex)
+    {
+        return ex.Code == StratumError.LowDifficultyShare ||
+            ex.Code == StratumError.Other && ex.Message == "ntime out of range";
+    }
+
+    private static IEnumerable<BitcoinJob> GetRadiantJobCandidates(BitcoinJob[] activeJobs, BitcoinJob submittedJob, string nTime)
+    {
+        if(activeJobs == null || activeJobs.Length == 0)
+            return submittedJob != null ? new[] { submittedJob } : Array.Empty<BitcoinJob>();
+
+        var result = new List<BitcoinJob>(activeJobs.Length);
+        var hasParsedNTime = uint.TryParse(nTime, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var nTimeInt);
+
+        if(hasParsedNTime)
+        {
+            // Search all 50 retained jobs by timestamp. This is cheap and normally
+            // identifies the exact work IceRiver was still hashing.
+            foreach(var candidate in activeJobs.Reverse()
+                .Where(candidate => candidate.BlockTemplate?.CurTime == nTimeInt)
+                .Take(RadiantFallbackJobChecks))
+            {
+                result.Add(candidate);
+            }
+        }
+
+        if(submittedJob != null && !result.Contains(submittedJob))
+            result.Add(submittedJob);
+
+        // A miner may roll ntime instead of returning the exact notify timestamp.
+        // In that case only hash a small set of closest retained templates to avoid
+        // turning malformed submissions into a 50-hash denial-of-service path.
+        var fallbackJobs = activeJobs
+            .Where(candidate => !result.Contains(candidate));
+
+        fallbackJobs = hasParsedNTime ?
+            fallbackJobs.OrderBy(candidate => Math.Abs((long) (candidate.BlockTemplate?.CurTime ?? 0) - nTimeInt)) :
+            fallbackJobs.Reverse();
+
+        foreach(var candidate in fallbackJobs.Take(RadiantFallbackJobChecks))
+            result.Add(candidate);
+
+        return result;
     }
 
     public virtual async ValueTask<Share> SubmitShareAsync(StratumConnection worker, object submission,
@@ -270,17 +383,65 @@ public class BitcoinJobManager : BitcoinJobManagerBase<BitcoinJob>
             throw new StratumException(StratumError.Other, "missing or invalid workername");
 
         BitcoinJob job;
+        BitcoinJob[] activeJobs;
+        double[] assignedDifficulties;
 
         lock(context)
         {
             job = context.GetJob(jobId);
+            activeJobs = IsRadiant ? context.GetJobsSnapshot() : null;
+            assignedDifficulties = IsRadiant ? null : context.GetJobDifficulties(jobId);
         }
 
-        if(job == null)
-            throw new StratumException(StratumError.JobNotFound, "job not found");
+        Share share = null;
+        string blockHex = null;
 
-        // validate & process
-        var (share, blockHex) = job.ProcessShare(worker, extraNonce2, nTime, nonce, versionBits);
+        if(IsRadiant)
+        {
+            var candidates = GetRadiantJobCandidates(activeJobs, job, nTime);
+            StratumException firstRecoverableError = null;
+            BitcoinJob matchedJob = null;
+
+            foreach(var candidate in candidates)
+            {
+                try
+                {
+                    (share, blockHex) = candidate.ProcessShare(worker, extraNonce2, nTime, nonce, versionBits, false);
+                    matchedJob = candidate;
+                    break;
+                }
+                catch(StratumException ex) when(IsRecoverableRadiantWorkIdError(ex))
+                {
+                    firstRecoverableError ??= ex;
+                }
+            }
+
+            if(matchedJob == null)
+            {
+                if(firstRecoverableError != null)
+                    throw firstRecoverableError;
+
+                throw new StratumException(StratumError.JobNotFound, "job not found");
+            }
+
+            if(!matchedJob.RegisterRecoveredSubmit(worker, extraNonce2, nTime, nonce))
+                throw new StratumException(StratumError.DuplicateShare, "duplicate share");
+
+            if(!string.Equals(matchedJob.JobId, jobId, StringComparison.OrdinalIgnoreCase))
+            {
+                logger.Debug(() => $"[{worker.ConnectionId}] RXD corrected IceRiver work id {jobId} to {matchedJob.JobId} for ntime {nTime}");
+            }
+
+            job = matchedJob;
+        }
+        else
+        {
+            if(job == null)
+                throw new StratumException(StratumError.JobNotFound, "job not found");
+
+            (share, blockHex) = job.ProcessShare(worker, extraNonce2, nTime, nonce,
+                versionBits, assignedDifficulties);
+        }
 
         // enrich share with common data
         share.PoolId = poolConfig.Id;

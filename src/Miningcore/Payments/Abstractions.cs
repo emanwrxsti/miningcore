@@ -22,3 +22,9 @@ public interface IPayoutScheme
 {
     Task UpdateBalancesAsync(IDbConnection con, IDbTransaction tx, IMiningPool pool, IPayoutHandler payoutHandler, Block block, decimal blockReward, CancellationToken ct);
 }
+
+/// <summary>Transactional guard for durable reward deduplication.</summary>
+public interface IBlockPayoutGuard
+{
+    Task<bool> TryBeginBlockPaymentAsync(IDbConnection con, IDbTransaction tx, Block block, CancellationToken ct);
+}

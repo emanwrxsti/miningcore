@@ -1,4 +1,5 @@
 using Miningcore.Configuration;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace Miningcore.Blockchain.Bitcoin.Configuration;
@@ -10,10 +11,20 @@ public class BitcoinPoolConfigExtra
     public string BechPrefix { get; set; } = "bc";
 
     /// <summary>
+    /// CashAddr prefix (e.g. bitcoincash, ecash, bitcoincashii)
+    /// </summary>
+    public string CashAddrPrefix { get; set; } = "bitcoincash";
+
+    /// <summary>
     /// Maximum number of tracked jobs.
-    /// Default: 12 - you should increase this value if your blockrefreshinterval is higher than 300ms
     /// </summary>
     public int? MaxActiveJobs { get; set; }
+
+    /// <summary>
+    /// Compatibility alias used by some existing pool configurations.
+    /// </summary>
+    [JsonProperty("maxActiveJobsPerMiner")]
+    public int? MaxActiveJobsPerMiner { get; set; }
 
     /// <summary>
     /// Set to true to limit RPC commands to old Bitcoin command set

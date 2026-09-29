@@ -14,6 +14,7 @@ using Miningcore.Blockchain.Handshake;
 using Miningcore.Blockchain.Kaspa;
 using Miningcore.Blockchain.Nexa;
 using Miningcore.Blockchain.Progpow;
+using Miningcore.Blockchain.Quantus;
 using Miningcore.Blockchain.Satoshicash;
 using Miningcore.Blockchain.Warthog;
 using Miningcore.Blockchain.Xelis;
@@ -138,6 +139,9 @@ public class AutofacModule : Module
         builder.RegisterType<ShareRecorder>()
             .SingleInstance();
 
+        builder.RegisterType<MinerStatsRedisService>()
+            .SingleInstance();
+
         builder.RegisterType<ShareReceiver>()
             .SingleInstance();
 
@@ -167,6 +171,14 @@ public class AutofacModule : Module
             .Keyed<IPayoutScheme>(PayoutScheme.PPLNSBF)
             .SingleInstance();
 
+        builder.RegisterType<PPSPaymentScheme>()
+            .Keyed<IPayoutScheme>(PayoutScheme.PPS)
+            .SingleInstance();
+
+        builder.RegisterType<FPPSPaymentScheme>()
+            .Keyed<IPayoutScheme>(PayoutScheme.FPPS)
+            .SingleInstance();
+
         builder.RegisterType<SOLOPaymentScheme>()
             .Keyed<IPayoutScheme>(PayoutScheme.SOLO)
             .SingleInstance();
@@ -179,6 +191,11 @@ public class AutofacModule : Module
         // Alephium
 
         builder.RegisterType<AlephiumJobManager>();
+
+        //////////////////////
+        // Quantus
+
+        builder.RegisterType<QuantusJobManager>();
         
         //////////////////////
         // Beam

@@ -52,6 +52,9 @@ public enum CoinFamily
     [EnumMember(Value = "progpow")]
     Progpow,
 
+    [EnumMember(Value = "quantus")]
+    Quantus,
+
     [EnumMember(Value = "satoshicash")]
     Satoshicash,
 
@@ -177,6 +180,7 @@ public abstract partial class CoinTemplate
         {CoinFamily.Kaspa, typeof(KaspaCoinTemplate)},
         {CoinFamily.Nexa, typeof(BitcoinTemplate)},
         {CoinFamily.Progpow, typeof(ProgpowCoinTemplate)},
+        {CoinFamily.Quantus, typeof(QuantusCoinTemplate)},
         {CoinFamily.Satoshicash, typeof(BitcoinTemplate)},
         {CoinFamily.Warthog, typeof(WarthogCoinTemplate)},
         {CoinFamily.Xelis, typeof(XelisCoinTemplate)},
@@ -190,6 +194,14 @@ public partial class AlephiumCoinTemplate : CoinTemplate
 
 public partial class BeamCoinTemplate : CoinTemplate
 {
+}
+
+public partial class QuantusCoinTemplate : CoinTemplate
+{
+    public override string GetAlgorithmName()
+    {
+        return "QPoW";
+    }
 }
 
 public enum BitcoinSubfamily
@@ -901,6 +913,7 @@ public enum PayoutScheme
     PPS = 4,
     PPBS = 5,
     PPLNSBF = 6,
+    FPPS = 7,
 }
 
 public partial class ClusterLoggingConfig
@@ -1140,9 +1153,52 @@ public partial class ClusterPaymentProcessingConfig
     public string CoinbaseString  { get; set; }
 }
 
+public class RedisConfig
+{
+    public bool Enabled { get; set; }
+    public string ConnectionString { get; set; } = "127.0.0.1:6379,abortConnect=false";
+    public int Database { get; set; }
+    public string KeyPrefix { get; set; } = "miningcore:minerstats";
+
+    /// <summary>
+    /// Expire inactive miner/worker keys after this many days. Null or 0 disables expiry.
+    /// </summary>
+    public int? RetentionDays { get; set; } = 30;
+
+    /// <summary>
+    /// Legacy inactivity fallback. Kept for backwards-compatible configs.
+    /// Multi-region session tracking uses SessionHeartbeatSeconds/SessionTimeoutSeconds.
+    /// </summary>
+    public int? SessionResetMinutes { get; set; } = 5;
+
+    /// <summary>
+    /// Friendly unique name for this Miningcore node/region, for example us, asia, or eu.
+    /// Falls back to clusterName-instanceId when omitted.
+    /// </summary>
+    public string NodeName { get; set; }
+
+    /// <summary>
+    /// Refresh a live Stratum session in Redis at this interval.
+    /// </summary>
+    public int? SessionHeartbeatSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Consider a Redis Stratum session dead after this many seconds without a heartbeat.
+    /// Must be comfortably larger than SessionHeartbeatSeconds.
+    /// </summary>
+    public int? SessionTimeoutSeconds { get; set; } = 120;
+
+    /// <summary>
+    /// Retain an offline worker hash for this many minutes after the final global
+    /// session disconnects. It is removed from live API results immediately.
+    /// </summary>
+    public int? DisconnectedRetentionMinutes { get; set; } = 30;
+}
+
 public partial class PersistenceConfig
 {
     public PostgresConfig Postgres { get; set; }
+    public RedisConfig Redis { get; set; }
 }
 
 public class RewardRecipient

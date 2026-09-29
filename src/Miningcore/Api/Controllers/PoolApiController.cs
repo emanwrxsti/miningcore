@@ -32,6 +32,7 @@ public class PoolApiController : ApiControllerBase
         shareRepo = ctx.Resolve<IShareRepository>();
         paymentsRepo = ctx.Resolve<IPaymentRepository>();
         clock = ctx.Resolve<IMasterClock>();
+        minerStatsRedis = ctx.Resolve<MinerStatsRedisService>();
         pools = ctx.Resolve<ConcurrentDictionary<string, IMiningPool>>();
         adcp = _adcp;
     }
@@ -42,6 +43,7 @@ public class PoolApiController : ApiControllerBase
     private readonly IMinerRepository minerRepo;
     private readonly IShareRepository shareRepo;
     private readonly IMasterClock clock;
+    private readonly MinerStatsRedisService minerStatsRedis;
     private readonly IActionDescriptorCollectionProvider adcp;
     private readonly ConcurrentDictionary<string, IMiningPool> pools;
 
@@ -247,7 +249,7 @@ public class PoolApiController : ApiControllerBase
             .ToArray();
 
         // enrich blocks
-        var blockInfobaseDict = pool.Template.ExplorerBlockLinks;
+        var blockInfobaseDict = pool.Template?.ExplorerBlockLinks;
 
         foreach(var block in blocks)
         {
@@ -288,7 +290,7 @@ public class PoolApiController : ApiControllerBase
             .ToArray();
 
         // enrich blocks
-        var blockInfobaseDict = pool.Template.ExplorerBlockLinks;
+        var blockInfobaseDict = pool.Template?.ExplorerBlockLinks;
 
         foreach(var block in blocks)
         {
@@ -434,6 +436,30 @@ public class PoolApiController : ApiControllerBase
         return stats;
     }
 
+
+    [HttpGet("{poolId}/miners/{address}/shares")]
+    public async Task<MinerShareStatsSnapshot> GetMinerShareStatsAsync(string poolId, string address)
+    {
+        var pool = GetPool(poolId);
+        var ct = HttpContext.RequestAborted;
+
+        if(string.IsNullOrWhiteSpace(address))
+            throw new ApiException("Invalid or missing miner address", HttpStatusCode.NotFound);
+
+        if(pool.Template.Family == CoinFamily.Ethereum)
+            address = address.ToLowerInvariant();
+
+        if(!minerStatsRedis.Enabled)
+            throw new ApiException("Redis miner stats are not enabled", HttpStatusCode.ServiceUnavailable);
+
+        var result = await minerStatsRedis.GetStatsAsync(pool.Id, address, ct);
+
+        if(result == null)
+            throw new ApiException("Redis miner stats are temporarily unavailable", HttpStatusCode.ServiceUnavailable);
+
+        return result;
+    }
+
     [HttpGet("{poolId}/miners/{address}/blocks")]
     public async Task<Responses.Block[]> PageMinerBlocksAsync(
         string poolId, string address, [FromQuery] int page, [FromQuery] int pageSize = 15, [FromQuery] BlockStatus[] state = null)
@@ -456,7 +482,7 @@ public class PoolApiController : ApiControllerBase
             .ToArray();
 
         // enrich blocks
-        var blockInfobaseDict = pool.Template.ExplorerBlockLinks;
+        var blockInfobaseDict = pool.Template?.ExplorerBlockLinks;
 
         foreach(var block in blocks)
         {
@@ -503,7 +529,7 @@ public class PoolApiController : ApiControllerBase
             .ToArray();
 
         // enrich blocks
-        var blockInfobaseDict = pool.Template.ExplorerBlockLinks;
+        var blockInfobaseDict = pool.Template?.ExplorerBlockLinks;
 
         foreach(var block in blocks)
         {

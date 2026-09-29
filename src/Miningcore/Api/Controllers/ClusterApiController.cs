@@ -58,7 +58,7 @@ public class ClusterApiController : ApiControllerBase
             if(pool == null)
                 continue;
 
-            var blockInfobaseDict = pool.Template.ExplorerBlockLinks;
+            var blockInfobaseDict = pool.Template?.ExplorerBlockLinks;
 
             // compute infoLink
             if(blockInfobaseDict != null)

@@ -1,267 +1,2079 @@
+# F4Pool Miningcore
 
+Custom Miningcore fork maintained for **F4Pool**.
 
-## About This Fork (Miningcore-Xhash)
-
-This fork of Miningcore adds **XHash algorithm support**, which is used by a new cryptocurrency called [Parallax (LAX)](https://parallaxchain.org).
-
-The XHash integration is currently in an early stage. The code can accept hashrate and handle stratum connections, but it has **not been fully tested** for block submissions or payment processing due to limited available hashrate for testing.
-
-Please treat this build as **experimental** and use it only for development, testing, or research purposes.
-
-If you find something incorrect or have suggestions for improving the implementation, I’d really appreciate your feedback or pull requests. I’m still learning and open to guidance from anyone with more experience in this area.
-
-Repository: [https://github.com/soosho/miningcore-xhash](https://github.com/soosho/miningcore-xhash)
-
-Maintainer: **Soosho**
+This repository is based on the Miningcore project and contains additional pool, API, Redis miner-statistics, and coin support used by F4Pool.
 
 ---
 
+# Features
 
+- High-performance asynchronous Stratum server
+- Multi-pool / multi-coin cluster support
+- Variable difficulty (VarDiff)
+- Native Proof-of-Work validation
+- PostgreSQL persistence
+- Redis live miner statistics
+- Per-wallet statistics
+- Per-worker statistics
+- Accepted share counters
+- Rejected share counters
+- Stale share counters
+- VarDiff retarget counters
+- Current worker difficulty
+- Worker activity timestamps
+- Automatic worker-session reset after inactivity
+- Automatic Redis expiration for inactive miners
+- REST API
+- Pool statistics
+- Miner statistics
+- Worker statistics
+- Payments
+- Blocks
+- Earnings
+- Miner performance history
+- PROP payout support
+- SOLO payout support
+- PPLNS payout support
+- Linux production deployment
+- Nginx reverse-proxy support
+- Systemd service support
 
-[![Build status](https://ci.appveyor.com/api/projects/status/nbvaa55gu3icd1q8?svg=true)](https://ci.appveyor.com/project/oliverw/miningcore)
-[![.NET](https://github.com/blackmennewstyle/miningcore/actions/workflows/dotnet.yml/badge.svg)](https://github.com/blackmennewstyle/miningcore/actions/workflows/dotnet.yml)
-[![license](https://img.shields.io/github/license/mashape/apistatus.svg)]()
+---
 
-<img src="https://github.com/blackmennewstyle/miningcore/raw/master/logo.png" width="150">
+# F4Pool Redis Live Miner Statistics
 
-### Features
+This fork adds a Redis-backed live miner-statistics system.
 
-- Supports clusters of pools each running individual currencies
-- Ultra-low-latency, multi-threaded Stratum implementation using asynchronous I/O
-- Adaptive share difficulty ("vardiff")
-- PoW validation (hashing) using native code for maximum performance
-- Session management for purging DDoS/flood initiated zombie workers
-- Payment processing
-- Banning System
-- Live Stats [API](https://github.com/oliverw/miningcore/wiki/API) on Port 4000
-- WebSocket streaming of notable events like Blocks found, Blocks unlocked, Payments and more
-- POW (proof-of-work) & POS (proof-of-stake) support
-- Detailed per-pool logging to console & filesystem
-- Runs on Linux and Windows
+Statistics are recorded separately for each:
 
-## Support
-
-Commercial support directly by the maintainer is available through [miningcore.pro](https://store.miningcore.pro).
-
-For general questions visit the [Discussions Area](https://github.com/blackmennewstyle/miningcore/discussions).
-
-## Contributions
-
-Code contributions are very welcome and should be submitted as standard [pull requests](https://docs.github.com/en/pull-requests) (PR) based on the [`dev` branch](https://github.com/blackmennewstyle/miningcore/tree/dev).
-
-## Building on Debian/Ubuntu
-
-```console
-git clone https://github.com/blackmennewstyle/miningcore
-cd miningcore
+```text
+pool
+└── wallet
+    └── worker
 ```
 
-Depending on your OS Version run either of these scripts:
+Example:
 
-```console
-./build-debian-11.sh
-```
-or
-```console
-./build-debian-12.sh
-```
-or
-```console
-./build-ubuntu-20.04.sh
-```
-or
-```console
-./build-ubuntu-21.04.sh
-```
-or
-```console
-./build-ubuntu-22.04.sh
+```text
+alph-prop
+└── WALLET_ADDRESS
+    ├── worker1
+    ├── worker2
+    └── worker3
 ```
 
-## Building on Windows
+Redis records live counters including:
 
-Download and install the [.NET 6 SDK](https://dotnet.microsoft.com/download/dotnet/6.0)
-
-```dosbatch
-git clone https://github.com/blackmennewstyle/miningcore
-cd miningcore
-build-windows.bat
+```text
+accepted
+rejected
+stale
+retargets
+currentDifficulty
+lastShare
+lastReject
+lastStale
+lastRetarget
+lastActivity
+sessionStarted
 ```
 
-### Building in Visual Studio
+The Stratum share-processing path does not directly wait for Redis writes.
 
-- Install [Visual Studio 2022](https://www.visualstudio.com/vs/). Visual Studio Community Edition is fine.
-- Open `Miningcore.sln` in Visual Studio
+Events are queued and periodically flushed to Redis so Redis statistics do not unnecessarily block share submission processing.
 
-## Building using Docker Engine
-In case you don't want to install any dependencies then you can build the app using the official Microsoft .NET SDK Docker image.
+---
 
-```console
-git clone https://github.com/blackmennewstyle/miningcore
-cd miningcore
-```
-Then build using Docker:
+# Worker Session Reset
 
-```console
-docker run --rm -v $(pwd):/app -w /app mcr.microsoft.com/dotnet/sdk:6.0 /bin/bash -c 'apt update && apt install cmake clang ninja-build build-essential libssl-dev pkg-config libboost-all-dev libsodium-dev libzmq5 libzmq3-dev golang-go libgmp-dev libc++-dev zlib1g-dev -y --no-install-recommends && cd src/Miningcore && dotnet publish -c Release --framework net6.0 -o /app/build/'
-```
-It will use a Linux container, you will build a Linux executable that will not run on Windows or macOS. You can use a runtime argument (-r) to specify the type of assets that you want to publish (if they don't match the SDK container). The following examples assume you want assets that match your host operating system, and use runtime arguments to ensure that.
+Worker counters represent the worker's current **global live mining session**.
+Multiple Miningcore instances can share one Redis database safely.
 
-For macOS:
+Example configuration:
 
-```console
-docker run --rm -v $(pwd):/app -w /app mcr.microsoft.com/dotnet/sdk:6.0 /bin/bash -c 'apt update && apt install cmake clang ninja-build build-essential libssl-dev pkg-config libboost-all-dev libsodium-dev libzmq5 libzmq3-dev golang-go libgmp-dev libc++-dev zlib1g-dev -y --no-install-recommends && cd src/Miningcore && dotnet publish -c Release --framework net6.0 -o /app/build/ -r osx-x64 --self-contained false'
-```
-
-### Building and Running Miningcore from a container
-
-**note** - The build scripts optimize  the build for the hardware platform the container is built on ( does it have avx for example).  If you run this container on a platform that does NOT have the same architecture you could have unexplained crashes.  YOU SHOULD BUILD THIS CONTAINER ON THE HOST YOU ARE GOING TO RUN THIS CONTAINER ON.
-
-Commands to build container: `docker build -t <your_dockerhubid>/miningcore:v73-foo .`
-
-The docker build assumes you are going to mount your  config file  in a volume mount.  for example:
-
-```sh
-
-docker run -d \
-    -p 4000:4000 \
-    -p 4066:4066 \
-    -p 4067:4067 \
-    --name mc    \
-    -v `pwd`/config_prod.json:/app/config.json \
-    --restart=unless-stopped \
-    <your_dockerhubid>/miningcore:v73-foo
-
+```json
+"redis": {
+  "enabled": true,
+  "connectionString": "10.20.30.10:6379,password=REPLACE_ME,abortConnect=false",
+  "database": 0,
+  "keyPrefix": "miningcore:minerstats",
+  "retentionDays": 30,
+  "sessionResetMinutes": 5,
+  "nodeName": "us",
+  "sessionHeartbeatSeconds": 30,
+  "sessionTimeoutSeconds": 120,
+  "disconnectedRetentionMinutes": 30
+}
 ```
 
+Each authorized Stratum socket receives a unique Redis session id. Nodes refresh
+their live sessions every `sessionHeartbeatSeconds`. If a node crashes or becomes
+unreachable, its sessions are treated as dead after `sessionTimeoutSeconds`.
 
+For a worker such as:
 
-
-
-For Windows using Linux container:
-
-```console
-docker run --rm -v $(pwd):/app -w /app mcr.microsoft.com/dotnet/sdk:6.0 /bin/bash -c 'apt update && apt install cmake clang ninja-build build-essential libssl-dev pkg-config libboost-all-dev libsodium-dev libzmq5 libzmq3-dev golang-go libgmp-dev libc++-dev zlib1g-dev -y --no-install-recommends && cd src/Miningcore && dotnet publish -c Release --framework net6.0 -o /app/build/ -r win-x64 --self-contained false'
+```text
+WALLET.worker1
 ```
 
-To delete used images and containers you can run after all:
-```console
-docker system prune -af
+if the final live session disconnects from every region, the worker is removed
+from live API results immediately. When it connects again, its counters begin at
+zero:
+
+```text
+accepted: 0
+rejected: 0
+stale: 0
+retargets: 0
 ```
 
-## Running Miningcore
+If the same `WALLET.worker1` still has another active session on another Miningcore
+instance, disconnecting one region does **not** reset the worker.
 
-### Production OS
+Wallet-level accepted/rejected/stale/retarget totals are calculated from the
+currently active worker sessions rather than lifetime Redis totals. PostgreSQL
+share/payment history is unaffected.
 
-Windows is **not** a supported production environment. Only Linux is. Please do not file issues related to running a pool on Windows. Windows topics should be posted under [discussions](https://github.com/blackmennewstyle/miningcore/discussions).
+`sessionResetMinutes` remains accepted for backwards-compatible configurations;
+the multi-region live-session logic is driven by heartbeat/timeout settings.
 
-Running and developing Miningcore on Windows is of course supported.
+---
 
-### Database setup
+# Redis Retention
 
-Miningcore currently requires PostgreSQL 10 or higher.
+Redis miner statistics use an expiration timer.
 
-Run Postgres's `psql` tool:
+Example:
 
-```console
+```json
+"retentionDays": 30
+```
+
+Thirty days is:
+
+```text
+2,592,000 seconds
+```
+
+Active miner keys continuously receive new activity and their Redis expiration is refreshed.
+
+If a miner disappears permanently:
+
+```text
+miner stops
+    ↓
+no new Redis activity
+    ↓
+30-day TTL counts down
+    ↓
+Redis removes the expired keys
+```
+
+This prevents old miner-stat keys from remaining forever.
+
+Redis statistics are separate from PostgreSQL payment/share/accounting information.
+
+---
+
+# Redis Key Layout
+
+Wallet addresses and worker names are SHA-256 hashed when used in Redis key names.
+
+Example layout:
+
+```text
+miningcore:minerstats:<poolId>:<walletHash>:totals
+
+miningcore:minerstats:<poolId>:<walletHash>:workers
+
+miningcore:minerstats:<poolId>:<walletHash>:worker:<workerHash>
+```
+
+Example:
+
+```text
+miningcore:minerstats:alph-prop:abc123...:totals
+miningcore:minerstats:alph-prop:abc123...:workers
+miningcore:minerstats:alph-prop:abc123...:worker:def456...
+```
+
+The worker name itself is stored inside the worker hash.
+
+---
+
+# Requirements
+
+Recommended production environment:
+
+- Linux
+- Ubuntu 22.04 or newer
+- Ubuntu 24.04 supported
+- .NET SDK 8.0.423 for building
+- .NET 8 runtime
+- PostgreSQL
+- Redis
+- C/C++ build tools
+- CMake
+- Clang
+- Boost
+- ZeroMQ development libraries
+- Sodium development libraries
+- GMP development libraries
+
+Windows may be useful for development, but Linux is recommended for production pool servers.
+
+---
+
+# .NET Version
+
+This repository targets:
+
+```text
+.NET 8
+```
+
+The project target is:
+
+```text
+net8.0
+```
+
+The repository `global.json` currently requests:
+
+```json
+{
+  "sdk": {
+    "version": "8.0.423",
+    "rollForward": "latestPatch"
+  }
+}
+```
+
+Check your installed SDK:
+
+```bash
+dotnet --version
+```
+
+Expected:
+
+```text
+8.0.423
+```
+
+List all installed SDKs:
+
+```bash
+dotnet --list-sdks
+```
+
+---
+
+# Install .NET 8 Manually
+
+If .NET 8.0.423 is not installed:
+
+```bash
+wget https://dot.net/v1/dotnet-install.sh
+chmod +x dotnet-install.sh
+
+./dotnet-install.sh \
+  --version 8.0.423 \
+  --install-dir "$HOME/.dotnet"
+```
+
+Add it to your shell:
+
+```bash
+echo 'export DOTNET_ROOT=$HOME/.dotnet' >> ~/.bashrc
+echo 'export PATH=$HOME/.dotnet:$PATH' >> ~/.bashrc
+
+source ~/.bashrc
+```
+
+Verify:
+
+```bash
+dotnet --version
+```
+
+---
+
+# Ubuntu Build Dependencies
+
+Install the common native build dependencies:
+
+```bash
+sudo apt update
+
+sudo apt install -y \
+  build-essential \
+  cmake \
+  clang \
+  ninja-build \
+  pkg-config \
+  libssl-dev \
+  libboost-all-dev \
+  libsodium-dev \
+  libzmq5 \
+  libzmq3-dev \
+  libgmp-dev \
+  libc++-dev \
+  zlib1g-dev \
+  golang-go
+```
+
+Package names can vary slightly between Linux distributions.
+
+---
+
+# Clone the Repository
+
+```bash
+git clone https://github.com/emanwrxsti/mc1.git
+cd mc1
+```
+
+Check the branch:
+
+```bash
+git status
+git branch --show-current
+```
+
+Production changes should normally be deployed from a known commit on `main`.
+
+---
+
+# Restore Dependencies
+
+```bash
+dotnet restore src/Miningcore/Miningcore.csproj
+```
+
+---
+
+# Build
+
+```bash
+dotnet build src/Miningcore/Miningcore.csproj
+```
+
+A successful build ends with:
+
+```text
+0 Error(s)
+```
+
+Native-library compiler warnings may be displayed during Linux builds.
+
+Warnings do not necessarily indicate a failed build.
+
+Always check the final:
+
+```text
+Warning(s)
+Error(s)
+```
+
+lines.
+
+---
+
+# Publish
+
+Create the production build:
+
+```bash
+dotnet publish src/Miningcore/Miningcore.csproj \
+  -c Release \
+  -f net8.0 \
+  -o ./build
+```
+
+The Linux build process also builds/copies the required native libraries.
+
+Check:
+
+```bash
+ls -lah build
+```
+
+You should see files including:
+
+```text
+Miningcore
+Miningcore.dll
+Miningcore.runtimeconfig.json
+coins.json
+config.schema.json
+```
+
+as well as required native `.so` libraries.
+
+---
+
+# PostgreSQL Installation
+
+Ubuntu:
+
+```bash
+sudo apt update
+sudo apt install -y postgresql postgresql-contrib
+```
+
+Enable PostgreSQL:
+
+```bash
+sudo systemctl enable --now postgresql
+```
+
+Check:
+
+```bash
+systemctl status postgresql
+```
+
+---
+
+# PostgreSQL Database Setup
+
+Open PostgreSQL:
+
+```bash
 sudo -u postgres psql
 ```
 
-In `psql` execute:
+Create the Miningcore user and database:
 
 ```sql
-CREATE ROLE miningcore WITH LOGIN ENCRYPTED PASSWORD 'your-secure-password';
+CREATE ROLE miningcore
+WITH LOGIN
+ENCRYPTED PASSWORD 'REPLACE_WITH_A_STRONG_PASSWORD';
+
 CREATE DATABASE miningcore OWNER miningcore;
 ```
 
-Quit `psql` with \q
+Exit:
+
+```text
+\q
+```
 
 Import the database schema:
 
-```console
-sudo -u postgres psql -d miningcore -f miningcore/src/Miningcore/Persistence/Postgres/Scripts/createdb.sql
+```bash
+sudo -u postgres psql \
+  -d miningcore \
+  -f src/Miningcore/Persistence/Postgres/Scripts/createdb.sql
 ```
 
-#### Advanced setup
+Do not put real database passwords into GitHub.
 
-If you are planning to run a Multipool-Cluster, the simple setup might not perform well enough under high load. In this case you are strongly advised to use PostgreSQL 11 or higher. After performing the steps outlined in the basic setup above, perform these additional steps:
+Use production-only configuration files outside the public repository whenever possible.
 
-**WARNING**: The following step will delete all recorded shares. Do **NOT** do this on a production pool unless you backup your `shares` table using `pg_backup` first!
+---
 
-```console
-sudo -u postgres psql -d miningcore -f miningcore/src/Miningcore/Persistence/Postgres/Scripts/createdb_postgresql_11_appendix.sql
+# Redis Installation
+
+Ubuntu:
+
+```bash
+sudo apt update
+sudo apt install -y redis-server
 ```
 
-After executing the command, your `shares` table is now a [list-partitioned table](https://www.postgresql.org/docs/11/ddl-partitioning.html) which dramatically improves query performance, since almost all database operations Miningcore performs are scoped to a certain pool.
+Enable Redis:
 
-The following step needs to performed **once for every new pool** you add to your cluster. Be sure to **replace all occurences** of `mypool1` in the statement below with the id of your pool from your Miningcore configuration file:
-
-```sql
-CREATE TABLE shares_mypool1 PARTITION OF shares FOR VALUES IN ('mypool1');
+```bash
+sudo systemctl enable --now redis-server
 ```
 
-Once you have done this for all of your existing pools you should now restore your shares from backup.
+Check:
 
-### Configuration
+```bash
+systemctl status redis-server
+```
 
-Create a configuration file `config.json` as described [here](https://github.com/oliverw/miningcore/wiki/Configuration).
+Test:
 
-### Start the Pool
+```bash
+redis-cli ping
+```
 
-```console
+Expected:
+
+```text
+PONG
+```
+
+---
+
+# Redis Security
+
+Redis should normally listen only on localhost:
+
+```text
+127.0.0.1:6379
+```
+
+Do not expose Redis port `6379` directly to the public internet.
+
+Miningcore connects locally to Redis.
+
+Recommended connection:
+
+```text
+127.0.0.1:6379,abortConnect=false
+```
+
+---
+
+# Redis Memory Usage
+
+Check memory:
+
+```bash
+redis-cli INFO memory | grep -E 'used_memory_human|maxmemory_human'
+```
+
+Check number of keys:
+
+```bash
+redis-cli DBSIZE
+```
+
+List F4Pool miner-stat keys:
+
+```bash
+redis-cli --scan --pattern 'miningcore:minerstats:*'
+```
+
+Check a key's TTL:
+
+```bash
+redis-cli TTL 'PASTE_REDIS_KEY_HERE'
+```
+
+Values:
+
+```text
+positive number = seconds until expiration
+-1              = key has no expiration
+-2              = key does not exist
+```
+
+---
+
+# Redis Persistence
+
+Check Redis disk-persistence configuration:
+
+```bash
+redis-cli CONFIG GET save
+redis-cli CONFIG GET appendonly
+redis-cli CONFIG GET dir
+redis-cli CONFIG GET dbfilename
+```
+
+Redis uses RAM as its active data store.
+
+Depending on Redis configuration, snapshots and/or append-only persistence may also save data to disk.
+
+---
+
+# Base Miningcore Configuration
+
+Example:
+
+```json
+{
+  "clusterName": "F4Pool",
+  "instanceId": 1,
+
+  "logging": {
+    "level": "info",
+    "enableConsoleLog": true,
+    "enableConsoleColors": true,
+    "logFile": "miningcore.log",
+    "apiLogFile": "api.log",
+    "logBaseDirectory": "logs",
+    "perPoolLogFile": true
+  },
+
+  "persistence": {
+    "postgres": {
+      "host": "127.0.0.1",
+      "port": 5432,
+      "user": "miningcore",
+      "password": "REPLACE_ME",
+      "database": "miningcore",
+      "commandTimeout": 6000
+    },
+
+    "redis": {
+      "enabled": true,
+      "connectionString": "127.0.0.1:6379,abortConnect=false",
+      "database": 0,
+      "keyPrefix": "miningcore:minerstats",
+      "retentionDays": 30,
+      "sessionResetMinutes": 5,
+      "nodeName": "us",
+      "sessionHeartbeatSeconds": 30,
+      "sessionTimeoutSeconds": 120,
+      "disconnectedRetentionMinutes": 30
+    }
+  },
+
+  "api": {
+    "enabled": true,
+    "listenAddress": "127.0.0.1",
+    "port": 4000,
+    "rateLimiting": {
+      "disabled": true
+    }
+  },
+
+  "paymentProcessing": {
+    "enabled": false,
+    "interval": 600
+  },
+
+  "pools": []
+}
+```
+
+Do not commit production RPC passwords, wallet passwords, database passwords, API keys, or private keys to GitHub.
+
+---
+
+# Starting Miningcore Manually
+
+Copy your production configuration into the build directory:
+
+```bash
+cp /path/to/config.json ./build/config.json
+```
+
+Start:
+
+```bash
 cd build
-Miningcore -c config.json
+
+./Miningcore -c config.json
 ```
 
-## Supported Currencies
+or:
 
-Refer to [this file](https://github.com/blackmennewstyle/miningcore/blob/master/src/Miningcore/coins.json) for a complete list.
+```bash
+dotnet Miningcore.dll -c config.json
+```
 
-## Caveats
+---
 
-### Monero
+# Systemd Production Service
 
-- Monero's Wallet Daemon (monero-wallet-rpc) relies on HTTP digest authentication for authentication which is currently not supported by Miningcore. Therefore monero-wallet-rpc must be run with the `--disable-rpc-login` option. It is advisable to mitigate the resulting security risk by putting monero-wallet-rpc behind a reverse proxy like nginx with basic-authentication.
-- Miningcore utilizes RandomX's light-mode by default which consumes only **256 MB of memory per RandomX-VM**. A modern (2021) era CPU will be able to handle ~ 50 shares per second in this mode.
-- If you are running into throughput problems on your pool you can either increase the number of RandomX virtual machines in light-mode by adding `"randomXVmCount": x` to your pool configuration where x is at maximum equal to the machine's number of processor cores. Alternatively you can activate fast-mode by adding `"randomXFlagsAdd": "RANDOMX_FLAG_FULL_MEM"` to the pool configuration. Fast mode increases performance by 10x but requires roughly **3 GB of RAM per RandomX-VM**.
+Example:
 
-### ZCash
+```ini
+[Unit]
+Description=F4Pool Miningcore
+After=network.target postgresql.service redis-server.service
 
-- Pools needs to be configured with both a t-addr and z-addr (new configuration property "z-address" of the pool configuration element)
-- First configured zcashd daemon needs to control both the t-addr and the z-addr (have the private key)
-- To increase the share processing throughput it is advisable to increase the maximum number of concurrent equihash solvers through the new configuration property "equihashMaxThreads" of the cluster configuration element. Increasing this value by one increases the peak memory consumption of the pool cluster by 1 GB.
-- Miners may use both t-addresses and z-addresses when connecting to the pool
+[Service]
+Type=simple
+User=miningcore
+WorkingDirectory=/opt/miningcore/build
 
-### Vertcoin
+ExecStart=/usr/bin/dotnet \
+  /opt/miningcore/build/Miningcore.dll \
+  -c /opt/miningcore/build/config.json
 
-- Be sure to copy the file `verthash.dat` from your vertcoin blockchain folder to your Miningcore server
-- In your Miningcore config file add this property to your vertcoin pool configuration: `"vertHashDataFile": "/path/to/verthash.dat",`
+Restart=always
+RestartSec=5
 
-## API
+TimeoutStopSec=15
+KillMode=control-group
+SendSIGKILL=yes
 
-Miningcore comes with an integrated REST API. Please refer to this page for instructions: https://github.com/oliverw/miningcore/wiki/API
+[Install]
+WantedBy=multi-user.target
+```
 
-## Running a production pool
+Save as:
 
-A public production pool requires a web-frontend for your users to check their hashrate, earnings etc. Miningcore does not include such frontend but there are several community projects that can be used as starting point.
+```text
+/etc/systemd/system/miningcore.service
+```
 
-Once again, do not run a production pool on Windows! This is not a supported configuration.
+Then:
 
-## Donations
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable miningcore
+sudo systemctl start miningcore
+```
 
-To support this project you can become a [sponsor]( https://github.com/sponsors//blackmennewstyle ) or send a donation to the following accounts:
+Status:
 
-* ETH:   `0xbC059e88A4dD11c2E882Fc6B83F8Ec12E4CCCFad`
-* BTC:   `16xvkGfG9nrJSKKo5nGWphP8w4hr2ZzVuw`
-* LTC:   `LLs76baYT7iMqQhizxtBC96Cy48iX3Eh1p`
-* DOGE:  `DFuvDSFh4N3SiXGDnye2Vbc8kqvMHbyQE1`
-* KAS:   `kaspa:qpmf0wyu7c5z4l82ax9cfc5ughwk2f9lgu8uckkqrrpjqkxuk7yrga5nntvgn`
-* CCX:   `ccx7S4B3gBeH1SGWCfqZp3NM7Vavg7H3S8ovJn8fU4bwC4vU7ChWfHtbNzifhrpbJ74bMDxj4KZFTcznTfsucCEg1Kgv7zbNgs`
-* FIRO:  `a5AsoTSkfPHQ3SUmR6binG1XW7oQQoFNU1`
-* ERGO:  `9gYyuZzaSw3TiCtUkSRuS3XVDUv41EFs3dtNCFGqiEwHqpb7gkF`
-* WART:  `7795fc0fe93e7e4e232a212f00bdc8885c580a5666d39a0d`
-* XMR:   `483zaHtMRfM7rw1dXgebhWaRR8QLgAF6w4BomAV319FVVHfdbYTLVuBRc4pQgRAnRpfy6CXvvwngK4Lo3mRKE29RRx3Jb5c`
-* XEL:   `xel:ajnsfv065qusndt0hfsngecrnf5690drmqmc0uq0etlx8zjlcyzqq2slgvt`
-* CTXC:  `0xbb60200d5151a4a0f9a75014e04cf61a0a9f0daf`
-* ZANO:  `ZxDKT1aqiEXPA5cDADtYEfMR1oXsRd68bby4nzUvVmnjHzzrfvjwhNdQ9yiWNeGutzg9LZdwsbP2FGB1gNpZXiYY1fCfpw33c`
-* SCASH: `scash1qe6dhv8kncz08jtqukyps4l2n83z2umewanlmas`
+```bash
+systemctl status miningcore --no-pager -l
+```
+
+Logs:
+
+```bash
+journalctl -u miningcore -f
+```
+
+Replace paths and users with the correct production values for your server.
+
+---
+
+# API Configuration
+
+Recommended:
+
+```json
+"api": {
+  "enabled": true,
+  "listenAddress": "127.0.0.1",
+  "port": 4000,
+  "rateLimiting": {
+    "disabled": true
+  }
+}
+```
+
+Binding to:
+
+```text
+127.0.0.1
+```
+
+keeps Miningcore's API private to the machine.
+
+A public web server such as Nginx can selectively proxy the public API.
+
+---
+
+# Nginx API Proxy
+
+Example:
+
+```nginx
+location /api/ {
+    proxy_pass http://127.0.0.1:4000;
+
+    proxy_http_version 1.1;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    proxy_connect_timeout 10s;
+    proxy_send_timeout 60s;
+    proxy_read_timeout 60s;
+
+    proxy_buffering off;
+}
+```
+
+Test Nginx:
+
+```bash
+sudo nginx -t
+```
+
+Reload:
+
+```bash
+sudo systemctl reload nginx
+```
+
+---
+
+# API Health Check
+
+Local:
+
+```bash
+curl http://127.0.0.1:4000/api/health-check
+```
+
+The API should return a successful response.
+
+---
+
+# API Route List
+
+Miningcore can display its currently registered API routes itself:
+
+```bash
+curl http://127.0.0.1:4000/api/help
+```
+
+This is the best way to verify the API routes supported by the exact build currently running.
+
+---
+
+# REST API
+
+Default local base URL:
+
+```text
+http://127.0.0.1:4000
+```
+
+Example public F4Pool base URL:
+
+```text
+https://f4pool.com
+```
+
+The following routes are available in this fork.
+
+---
+
+## General API
+
+### Health Check
+
+```http
+GET /api/health-check
+```
+
+Example:
+
+```bash
+curl -s http://127.0.0.1:4000/api/health-check
+```
+
+---
+
+### API Help
+
+Lists registered API routes:
+
+```http
+GET /api/help
+```
+
+Example:
+
+```bash
+curl -s http://127.0.0.1:4000/api/help
+```
+
+---
+
+### Cluster Blocks
+
+```http
+GET /api/blocks
+```
+
+Parameters:
+
+```text
+page
+pageSize
+state
+```
+
+Example:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/blocks?page=0&pageSize=15' \
+  | jq
+```
+
+---
+
+# Pool API
+
+## List Pools
+
+```http
+GET /api/pools
+```
+
+Optional:
+
+```text
+topMinersRange
+```
+
+Example:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/pools' \
+  | jq
+```
+
+---
+
+## Pool Information
+
+```http
+GET /api/pools/{poolId}
+```
+
+Example:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/pools/alph-prop' \
+  | jq
+```
+
+---
+
+## Pool Performance
+
+```http
+GET /api/pools/{poolId}/performance
+```
+
+Query parameters:
+
+```text
+r = sample range
+i = sample interval
+```
+
+Example:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/pools/alph-prop/performance?r=Day&i=Hour' \
+  | jq
+```
+
+---
+
+## Pool Miners
+
+```http
+GET /api/pools/{poolId}/miners
+```
+
+Parameters:
+
+```text
+page
+pageSize
+topMinersRange
+```
+
+Example:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/pools/alph-prop/miners?page=0&pageSize=15' \
+  | jq
+```
+
+---
+
+## Pool Blocks
+
+```http
+GET /api/pools/{poolId}/blocks
+```
+
+Parameters:
+
+```text
+page
+pageSize
+state
+```
+
+Example:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/pools/alph-prop/blocks?page=0&pageSize=15' \
+  | jq
+```
+
+---
+
+## Pool Blocks V2
+
+```http
+GET /api/v2/pools/{poolId}/blocks
+```
+
+The V2 endpoint includes pagination metadata.
+
+Example:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/v2/pools/alph-prop/blocks?page=0&pageSize=15' \
+  | jq
+```
+
+---
+
+## Pool Payments
+
+```http
+GET /api/pools/{poolId}/payments
+```
+
+Parameters:
+
+```text
+page
+pageSize
+```
+
+Example:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/pools/alph-prop/payments?page=0&pageSize=15' \
+  | jq
+```
+
+---
+
+## Pool Payments V2
+
+```http
+GET /api/v2/pools/{poolId}/payments
+```
+
+Example:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/v2/pools/alph-prop/payments?page=0&pageSize=15' \
+  | jq
+```
+
+---
+
+# Miner API
+
+Replace:
+
+```text
+POOL_ID
+WALLET_ADDRESS
+```
+
+with real values.
+
+Always URL-encode wallet addresses when required by the client.
+
+---
+
+## Miner Information
+
+```http
+GET /api/pools/{poolId}/miners/{address}
+```
+
+Example:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/pools/POOL_ID/miners/WALLET_ADDRESS' \
+  | jq
+```
+
+This returns the normal Miningcore miner statistics, including performance/payment information when available.
+
+---
+
+# Live Redis Share Statistics API
+
+This is an F4Pool fork extension.
+
+```http
+GET /api/pools/{poolId}/miners/{address}/shares
+```
+
+Example:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/pools/POOL_ID/miners/WALLET_ADDRESS/shares' \
+  | jq
+```
+
+Example response:
+
+```json
+{
+  "address": "WALLET_ADDRESS",
+  "accepted": 1521,
+  "rejected": 2,
+  "stale": 1,
+  "retargets": 8,
+  "lastShare": "2026-08-18T14:20:00Z",
+  "lastReject": null,
+  "lastStale": null,
+  "lastRetarget": "2026-08-18T14:18:00Z",
+  "workers": [
+    {
+      "minerWorker": "WALLET_ADDRESS.worker1",
+      "worker": "worker1",
+      "accepted": 421,
+      "rejected": 0,
+      "stale": 0,
+      "retargets": 2,
+      "currentDifficulty": 512,
+      "lastShare": "2026-08-18T14:20:00Z",
+      "lastReject": null,
+      "lastStale": null,
+      "lastRetarget": "2026-08-18T14:18:00Z"
+    }
+  ]
+}
+```
+
+Possible HTTP response:
+
+```text
+200 = statistics returned
+404 = invalid/missing pool or wallet
+503 = Redis statistics disabled or temporarily unavailable
+```
+
+---
+
+# Live Dashboard Polling
+
+The `/shares` endpoint returns a current snapshot.
+
+It is not currently an SSE or WebSocket stream.
+
+For a live frontend, poll the endpoint periodically.
+
+Example JavaScript:
+
+```javascript
+const interval = setInterval(async () => {
+    const response = await fetch(
+        `/api/pools/${encodeURIComponent(poolId)}/miners/${encodeURIComponent(wallet)}/shares`
+    );
+
+    if (!response.ok)
+        return;
+
+    const stats = await response.json();
+
+    console.log(stats);
+}, 2000);
+```
+
+Clean up the polling interval when leaving the page:
+
+```javascript
+clearInterval(interval);
+```
+
+A two-to-five-second polling interval is normally sufficient for a live miner dashboard.
+
+---
+
+# Live Stats Privacy
+
+The Redis implementation does not globally scan and return every wallet.
+
+The API calculates the Redis wallet key from the wallet address requested and returns that wallet's worker statistics.
+
+However:
+
+```text
+wallet address != authentication
+```
+
+If the API is publicly accessible and someone knows another miner's wallet address, they may be able to request that wallet's public miner statistics.
+
+True ownership privacy requires authentication, a signed challenge, access token, or another wallet-ownership verification system.
+
+---
+
+## Miner Blocks
+
+```http
+GET /api/pools/{poolId}/miners/{address}/blocks
+```
+
+Parameters:
+
+```text
+page
+pageSize
+state
+```
+
+Example:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/pools/POOL_ID/miners/WALLET_ADDRESS/blocks?page=0&pageSize=15' \
+  | jq
+```
+
+---
+
+## Miner Blocks V2
+
+```http
+GET /api/v2/pools/{poolId}/miners/{address}/blocks
+```
+
+Example:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/v2/pools/POOL_ID/miners/WALLET_ADDRESS/blocks?page=0&pageSize=15' \
+  | jq
+```
+
+---
+
+## Miner Payments
+
+```http
+GET /api/pools/{poolId}/miners/{address}/payments
+```
+
+Example:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/pools/POOL_ID/miners/WALLET_ADDRESS/payments?page=0&pageSize=15' \
+  | jq
+```
+
+---
+
+## Miner Payments V2
+
+```http
+GET /api/v2/pools/{poolId}/miners/{address}/payments
+```
+
+Example:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/v2/pools/POOL_ID/miners/WALLET_ADDRESS/payments?page=0&pageSize=15' \
+  | jq
+```
+
+---
+
+## Miner Balance Changes
+
+```http
+GET /api/pools/{poolId}/miners/{address}/balancechanges
+```
+
+Example:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/pools/POOL_ID/miners/WALLET_ADDRESS/balancechanges?page=0&pageSize=15' \
+  | jq
+```
+
+---
+
+## Miner Balance Changes V2
+
+```http
+GET /api/v2/pools/{poolId}/miners/{address}/balancechanges
+```
+
+---
+
+## Miner Daily Earnings
+
+```http
+GET /api/pools/{poolId}/miners/{address}/earnings/daily
+```
+
+Example:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/pools/POOL_ID/miners/WALLET_ADDRESS/earnings/daily?page=0&pageSize=30' \
+  | jq
+```
+
+---
+
+## Miner Daily Earnings V2
+
+```http
+GET /api/v2/pools/{poolId}/miners/{address}/earnings/daily
+```
+
+---
+
+## Miner Performance
+
+```http
+GET /api/pools/{poolId}/miners/{address}/performance
+```
+
+Example day:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/pools/POOL_ID/miners/WALLET_ADDRESS/performance?mode=Day' \
+  | jq
+```
+
+Supported ranges depend on the running build.
+
+The current implementation supports hourly, daily, and monthly performance sampling modes.
+
+---
+
+## Miner Settings
+
+Get settings:
+
+```http
+GET /api/pools/{poolId}/miners/{address}/settings
+```
+
+Update settings:
+
+```http
+POST /api/pools/{poolId}/miners/{address}/settings
+```
+
+The public update path performs additional checks including recently used mining IP validation.
+
+---
+
+# Admin API
+
+Admin routes are under:
+
+```text
+/api/admin
+```
+
+These routes can modify runtime Miningcore behavior.
+
+**Do not expose the Admin API unrestricted to the public internet.**
+
+Use an IP whitelist, firewall rule, private interface, VPN, or Nginx restriction.
+
+---
+
+## Change Log Level
+
+```http
+GET /api/admin/logging/level/{level}
+```
+
+Example:
+
+```text
+Trace
+Debug
+Info
+Warn
+Error
+Fatal
+```
+
+---
+
+## Enable Payment Processing for All Pools
+
+```http
+GET /api/admin/payment/processing/enable
+```
+
+---
+
+## Disable Payment Processing for All Pools
+
+```http
+GET /api/admin/payment/processing/disable
+```
+
+---
+
+## Enable Payment Processing for One Pool
+
+```http
+GET /api/admin/payment/processing/{poolId}/enable
+```
+
+---
+
+## Disable Payment Processing for One Pool
+
+```http
+GET /api/admin/payment/processing/{poolId}/disable
+```
+
+---
+
+## Garbage Collection Statistics
+
+```http
+GET /api/admin/stats/gc
+```
+
+---
+
+## Force Garbage Collection
+
+```http
+POST /api/admin/forcegc
+```
+
+---
+
+## Miner Balance — Admin
+
+```http
+GET /api/admin/pools/{poolId}/miners/{address}/getbalance
+```
+
+---
+
+## Miner Settings — Admin
+
+Get:
+
+```http
+GET /api/admin/pools/{poolId}/miners/{address}/settings
+```
+
+Set:
+
+```http
+POST /api/admin/pools/{poolId}/miners/{address}/settings
+```
+
+Again, these endpoints should be protected.
+
+---
+
+# Protecting `/api/admin/` with Nginx
+
+Example localhost-only restriction:
+
+```nginx
+location ^~ /api/admin/ {
+    allow 127.0.0.1;
+    deny all;
+
+    proxy_pass http://127.0.0.1:4000;
+
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+For remote administration, use a trusted management IP or VPN rather than exposing these endpoints to everyone.
+
+---
+
+# API Testing
+
+Check API:
+
+```bash
+curl -s -o /dev/null \
+  -w "HTTP %{http_code}\n" \
+  http://127.0.0.1:4000/api/pools
+```
+
+Expected:
+
+```text
+HTTP 200
+```
+
+Health:
+
+```bash
+curl -s \
+  http://127.0.0.1:4000/api/health-check
+```
+
+Routes:
+
+```bash
+curl -s \
+  http://127.0.0.1:4000/api/help
+```
+
+---
+
+# Redis Live Stats Testing
+
+Check Redis:
+
+```bash
+redis-cli ping
+```
+
+Expected:
+
+```text
+PONG
+```
+
+List miner-stat keys:
+
+```bash
+redis-cli --scan \
+  --pattern 'miningcore:minerstats:*' \
+  | head -20
+```
+
+Inspect wallet totals:
+
+```bash
+redis-cli HGETALL \
+  'miningcore:minerstats:POOL_ID:WALLET_HASH:totals'
+```
+
+Inspect workers:
+
+```bash
+redis-cli SMEMBERS \
+  'miningcore:minerstats:POOL_ID:WALLET_HASH:workers'
+```
+
+Inspect worker:
+
+```bash
+redis-cli HGETALL \
+  'miningcore:minerstats:POOL_ID:WALLET_HASH:worker:WORKER_HASH'
+```
+
+Check TTL:
+
+```bash
+redis-cli TTL \
+  'miningcore:minerstats:POOL_ID:WALLET_HASH:worker:WORKER_HASH'
+```
+
+---
+
+# Watch Live API Statistics
+
+For testing:
+
+```bash
+watch -n 2 \
+'curl -s "http://127.0.0.1:4000/api/pools/POOL_ID/miners/WALLET_ADDRESS/shares" | jq'
+```
+
+This makes it easy to watch:
+
+```text
+accepted
+rejected
+stale
+retargets
+currentDifficulty
+lastShare
+```
+
+change while the miner is running.
+
+---
+
+# Test Worker Session Reset
+
+To test the configured five-minute session reset:
+
+1. Start a miner as:
+
+```text
+WALLET.testworker
+```
+
+2. Confirm accepted shares are increasing.
+
+3. Stop only `testworker`.
+
+4. Leave it disconnected longer than:
+
+```text
+sessionResetMinutes
+```
+
+5. Start `WALLET.testworker` again.
+
+6. Query:
+
+```bash
+curl -s \
+  'http://127.0.0.1:4000/api/pools/POOL_ID/miners/WALLET/shares' \
+  | jq
+```
+
+The reconnecting worker should begin a new worker session.
+
+Other workers on the same wallet should remain unchanged.
+
+Wallet totals should remain cumulative.
+
+---
+
+# Pool Configuration
+
+Each configured pool normally contains:
+
+```text
+id
+enabled
+coin
+address
+ports
+daemons
+paymentProcessing
+rewardRecipients
+banning
+```
+
+Example skeleton:
+
+```json
+{
+  "id": "example-prop",
+  "enabled": true,
+  "coin": "example",
+  "address": "POOL_WALLET",
+
+  "ports": {
+    "3333": {
+      "listenAddress": "0.0.0.0",
+      "difficulty": 100,
+      "varDiff": {
+        "minDiff": 10,
+        "maxDiff": null,
+        "targetTime": 15,
+        "retargetTime": 90,
+        "variancePercent": 30
+      }
+    }
+  },
+
+  "daemons": [
+    {
+      "host": "127.0.0.1",
+      "port": 1234
+    }
+  ],
+
+  "paymentProcessing": {
+    "enabled": false,
+    "minimumPayment": 0.1,
+    "payoutScheme": "PROP",
+    "payoutSchemeConfig": {}
+  }
+}
+```
+
+Actual daemon configuration varies by coin.
+
+---
+
+# Payout Schemes
+
+Miningcore supports payout scheme configuration including:
+
+```text
+PPLNS
+PPLNSBF
+PROP
+SOLO
+PPS
+FPPS
+PPBS
+```
+
+Not every scheme is necessarily appropriate or fully tested for every coin.
+
+Always test payout processing before enabling automatic payments on a production pool.
+
+---
+
+# F4Pool Coin Support
+
+This fork includes the broader Miningcore coin-family infrastructure plus F4Pool-specific work.
+
+F4Pool deployments currently include work for coins such as:
+
+```text
+Alephium
+SatoshiCash / SCASH
+```
+
+The repository's actual supported coin definitions are stored in:
+
+```text
+src/Miningcore/coins.json
+```
+
+Always check `coins.json` and the corresponding blockchain implementation before assuming a coin is production-ready.
+
+---
+
+# SCASH
+
+The fork contains SatoshiCash/SCASH Miningcore integration.
+
+SCASH deployments may use:
+
+```text
+RPC
+ZMQ raw block notifications
+ZMQ raw transaction notifications
+TCP Stratum
+TLS Stratum
+PROP
+SOLO
+```
+
+Exact ports and daemon credentials belong in the production `config.json`, not in this README.
+
+---
+
+# Alephium
+
+The fork contains Alephium pool support.
+
+F4Pool deployment configurations may include separate:
+
+```text
+PROP
+SOLO
+```
+
+pool IDs.
+
+Use the actual production configuration for current Stratum ports and payout settings.
+
+---
+
+# Production Security
+
+Never commit:
+
+```text
+wallet passwords
+private keys
+seed phrases
+PostgreSQL passwords
+Redis passwords
+daemon RPC passwords
+API keys
+TLS private keys
+exchange API secrets
+```
+
+Recommended:
+
+```text
+Miningcore API -> localhost
+PostgreSQL     -> localhost/private network
+Redis          -> localhost
+Daemon RPC     -> localhost/private network
+Stratum        -> public required ports only
+Nginx          -> public HTTPS frontend/API proxy
+```
+
+Use a firewall.
+
+Example UFW status:
+
+```bash
+sudo ufw status numbered
+```
+
+Only expose the services miners and web users actually need.
+
+---
+
+# Updating the Server
+
+Example workflow:
+
+```bash
+cd /path/to/mc1
+
+git fetch origin
+git status
+git pull --ff-only origin main
+
+dotnet restore src/Miningcore/Miningcore.csproj
+
+dotnet publish src/Miningcore/Miningcore.csproj \
+  -c Release \
+  -f net8.0 \
+  -o ./build
+```
+
+Verify the production configuration before restarting.
+
+Then restart the relevant Miningcore service.
+
+---
+
+# Troubleshooting
+
+## API not responding
+
+Check listener:
+
+```bash
+ss -ltnp | grep 4000
+```
+
+Test local API:
+
+```bash
+curl -v \
+  http://127.0.0.1:4000/api/health-check
+```
+
+Check logs:
+
+```bash
+journalctl -u miningcore -n 200 --no-pager
+```
+
+---
+
+## Redis not working
+
+```bash
+redis-cli ping
+```
+
+Check service:
+
+```bash
+systemctl status redis-server --no-pager -l
+```
+
+Check keys:
+
+```bash
+redis-cli DBSIZE
+```
+
+Check miner keys:
+
+```bash
+redis-cli --scan \
+  --pattern 'miningcore:minerstats:*' \
+  | head
+```
+
+---
+
+## Redis `/shares` API returns 503
+
+Verify Redis is enabled:
+
+```json
+"redis": {
+  "enabled": true
+}
+```
+
+Verify:
+
+```bash
+redis-cli ping
+```
+
+Then inspect Miningcore logs for:
+
+```text
+Redis miner stats online
+```
+
+---
+
+## Pool API returns 500
+
+Check:
+
+```bash
+curl -v \
+  http://127.0.0.1:4000/api/pools
+```
+
+Then inspect:
+
+```bash
+tail -100 logs/api.log
+```
+
+or:
+
+```bash
+journalctl -u miningcore -n 200 --no-pager
+```
+
+---
+
+## Check Miningcore Process
+
+```bash
+ps aux | grep -i Miningcore
+```
+
+---
+
+## Check API Routes
+
+```bash
+curl -s \
+  http://127.0.0.1:4000/api/help
+```
+
+---
+
+# Development Workflow
+
+Before committing:
+
+```bash
+git status --short
+git diff --check
+git diff
+```
+
+Build:
+
+```bash
+dotnet build src/Miningcore/Miningcore.csproj
+```
+
+Only commit after:
+
+```text
+0 Error(s)
+```
+
+Then:
+
+```bash
+git add .
+git commit -m "Describe the change"
+git push origin main
+```
+
+For larger production changes, using a separate branch and pull request is recommended.
+
+---
+
+# Repository Structure
+
+Important locations:
+
+```text
+src/Miningcore/
+├── Api/
+│   └── Controllers/
+├── Blockchain/
+├── Configuration/
+│   └── ClusterConfig.cs
+├── Mining/
+│   ├── PoolBase.cs
+│   └── MinerStatsRedisService.cs
+├── Persistence/
+│   └── Postgres/
+├── coins.json
+├── config.schema.json
+└── Miningcore.csproj
+```
+
+Redis miner-stat implementation:
+
+```text
+src/Miningcore/Mining/MinerStatsRedisService.cs
+```
+
+API:
+
+```text
+src/Miningcore/Api/Controllers/
+```
+
+Configuration classes:
+
+```text
+src/Miningcore/Configuration/ClusterConfig.cs
+```
+
+---
+
+# Upstream
+
+This repository is a customized fork of Miningcore.
+
+Original/upstream Miningcore development has been maintained by the Miningcore community and upstream maintainers.
+
+When taking upstream changes, review them carefully before merging because F4Pool contains custom code that may differ from upstream.
+
+---
+
+# License
+
+This fork retains the licensing requirements of the original Miningcore project and the license included with this repository.
+
+See the repository license file for details.
+
+---
+
+# F4Pool
+
+Production mining-pool software used by:
+
+```text
+F4Pool
+https://f4pool.com
+```
+
+This repository contains backend Miningcore infrastructure.
+
+Frontend applications should consume the REST API rather than connecting directly to PostgreSQL or Redis.
+
+In particular:
+
+```text
+Browser
+   ↓
+F4Pool frontend/backend
+   ↓
+Miningcore REST API
+   ↓
+Redis / PostgreSQL
+```
+
+Do not expose Redis directly to web browsers.

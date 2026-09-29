@@ -1,0 +1,16 @@
+[package]
+name = "quantuspow"
+version = "1.0.0"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+qp-poseidon-core = { path = "vendor/qp-poseidon" }
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1

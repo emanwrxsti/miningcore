@@ -213,4 +213,7 @@ fabric.properties
 /*/*/*/*/*/*/*/*/*.o
 /*/*/*/*/*/*/*/*/*/*.o
 /*/*/*/*/*/*/*/*/*/*.o
-config.json
+/dotnet/
+
+/src/Native/libquantuspow/target/
+/TestResults/

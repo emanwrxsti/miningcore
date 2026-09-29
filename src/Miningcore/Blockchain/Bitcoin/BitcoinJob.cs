@@ -346,25 +346,36 @@ public class BitcoinJob
         return reward;
     }
 
-    protected bool RegisterSubmit(string extraNonce1, string extraNonce2, string nTime, string nonce)
+    protected bool RegisterSubmit(string extraNonce1, string extraNonce2,
+        string nTime, string nonce, string versionBits = null)
     {
+        // Include every field that can change the actual block header.
+        // Version bits are especially important for Elektron because BIP320
+        // version rolling supplies a large part of its usable work-space.
         var key = new StringBuilder()
-            .Append(extraNonce1)
-            .Append(extraNonce2) // lowercase as we don't want to accept case-sensitive values as valid.
-            .Append(nTime)
-            .Append(nonce) // lowercase as we don't want to accept case-sensitive values as valid.
+            .Append(extraNonce1 ?? string.Empty)
+            .Append('|')
+            .Append(extraNonce2 ?? string.Empty)
+            .Append('|')
+            .Append(nTime ?? string.Empty)
+            .Append('|')
+            .Append(nonce ?? string.Empty)
+            .Append('|')
+            .Append(versionBits ?? string.Empty)
             .ToString();
 
         return submissions.TryAdd(key, true);
     }
 
-    protected byte[] SerializeHeader(Span<byte> coinbaseHash, uint nTime, uint nonce, uint? versionMask, uint? versionBits)
+    protected byte[] SerializeHeader(Span<byte> coinbaseHash, uint nTime, uint nonce,
+        uint? versionMask, uint? versionBits, uint? baseVersionOverride = null)
     {
         // build merkle-root
         var merkleRoot = mt.WithFirst(coinbaseHash.ToArray());
 
-        // Build version
-        var version = BlockTemplate.Version;
+        // Build version. Elektron overrides the base version per worker
+        // because its fixed coinbase cannot provide extranonce work-space.
+        var version = baseVersionOverride ?? BlockTemplate.Version;
 
         // Overt-ASIC boost
         if(versionMask.HasValue && versionBits.HasValue)
@@ -385,8 +396,20 @@ public class BitcoinJob
             return blockHeader.ToBytes();
     }
 
+    /// <summary>
+    /// Optional worker-specific base block version.
+    /// Standard Bitcoin-family jobs return null.
+    /// Elektron uses this to create independent header work-space without
+    /// modifying its consensus-sensitive coinbase.
+    /// </summary>
+    protected virtual uint? GetBaseVersionForWorker(StratumConnection worker)
+    {
+        return null;
+    }
+
     protected virtual (Share Share, string BlockHex) ProcessShareInternal(
-        StratumConnection worker, string extraNonce2, uint nTime, uint nonce, uint? versionBits)
+        StratumConnection worker, string extraNonce2, uint nTime, uint nonce, uint? versionBits,
+        IReadOnlyList<double> assignedDifficulties = null)
     {
         var context = worker.ContextAs<BitcoinWorkerContext>();
         var extraNonce1 = context.ExtraNonce1;
@@ -397,7 +420,13 @@ public class BitcoinJob
         coinbaseHasher.Digest(coinbase, coinbaseHash);
 
         // hash block-header
-        var headerBytes = SerializeHeader(coinbaseHash, nTime, nonce, context.VersionRollingMask, versionBits);
+        var headerBytes = SerializeHeader(
+            coinbaseHash,
+            nTime,
+            nonce,
+            context.VersionRollingMask,
+            versionBits,
+            GetBaseVersionForWorker(worker));
         Span<byte> headerHash = stackalloc byte[32];
         headerHasher.Digest(headerBytes, headerHash, (ulong) nTime, BlockTemplate, coin, networkParams);
         var headerValue = new uint256(headerHash);
@@ -405,28 +434,68 @@ public class BitcoinJob
         // calc share-diff
         var shareDiff = (double) new BigRational(BitcoinConstants.Diff1, headerHash.ToBigInteger()) * shareMultiplier;
         var stratumDifficulty = context.Difficulty;
-        var ratio = shareDiff / stratumDifficulty;
 
         // check if the share meets the much harder block difficulty (block candidate)
         var isBlockCandidate = headerValue <= blockTargetValue;
 
-        // test if share meets at least workers current difficulty
-        if(!isBlockCandidate && ratio < 0.99)
+        if(assignedDifficulties?.Count > 0)
         {
-            // check if share matched the previous difficulty from before a vardiff retarget
-            if(context.VarDiff?.LastUpdate != null && context.PreviousDifficulty.HasValue)
+            // Validate only against difficulties actually announced for this job.
+            // Prefer current vardiff when this job was announced at that value,
+            // then fall back to older values for buffered ASIC submissions.
+            double matchedDifficulty = 0;
+            var currentWasAssigned = assignedDifficulties.Any(x => x == context.Difficulty);
+
+            if(currentWasAssigned && context.Difficulty > 0 &&
+                shareDiff / context.Difficulty >= 0.99)
             {
-                ratio = shareDiff / context.PreviousDifficulty.Value;
+                matchedDifficulty = context.Difficulty;
+            }
+            else
+            {
+                foreach(var candidateDifficulty in assignedDifficulties)
+                {
+                    if(candidateDifficulty <= 0 ||
+                        candidateDifficulty == context.Difficulty)
+                    {
+                        continue;
+                    }
 
-                if(ratio < 0.99)
-                    throw new StratumException(StratumError.LowDifficultyShare, $"low difficulty share ({shareDiff})");
-
-                // use previous difficulty
-                stratumDifficulty = context.PreviousDifficulty.Value;
+                    if(shareDiff / candidateDifficulty >= 0.99 &&
+                        candidateDifficulty > matchedDifficulty)
+                    {
+                        matchedDifficulty = candidateDifficulty;
+                    }
+                }
             }
 
-            else
-                throw new StratumException(StratumError.LowDifficultyShare, $"low difficulty share ({shareDiff})");
+            if(matchedDifficulty > 0)
+                stratumDifficulty = matchedDifficulty;
+            else if(!isBlockCandidate)
+                throw new StratumException(StratumError.LowDifficultyShare,
+                    $"low difficulty share ({shareDiff})");
+        }
+        else
+        {
+            // Compatibility fallback for paths without per-job state.
+            var ratio = shareDiff / stratumDifficulty;
+
+            if(!isBlockCandidate && ratio < 0.99)
+            {
+                if(context.VarDiff?.LastUpdate != null && context.PreviousDifficulty.HasValue)
+                {
+                    ratio = shareDiff / context.PreviousDifficulty.Value;
+
+                    if(ratio < 0.99)
+                        throw new StratumException(StratumError.LowDifficultyShare,
+                            $"low difficulty share ({shareDiff})");
+
+                    stratumDifficulty = context.PreviousDifficulty.Value;
+                }
+                else
+                    throw new StratumException(StratumError.LowDifficultyShare,
+                        $"low difficulty share ({shareDiff})");
+            }
         }
 
         var result = new Share
@@ -494,10 +563,11 @@ public class BitcoinJob
             {
                 var separator = new byte[] { 0x01 };
                 var mweb = BlockTemplate.Extra.SafeExtensionDataAs<MwebBlockTemplateExtra>();
-                var mwebRaw = mweb.Mweb.HexToByteArray();
-
-                bs.ReadWrite(separator);
-                bs.ReadWrite(mwebRaw);
+                if (mweb != null && mweb.Mweb != null) {
+                    var mwebRaw = mweb.Mweb.HexToByteArray();
+                    bs.ReadWrite(separator);
+                    bs.ReadWrite(mwebRaw);
+                }
             }
 
             return stream.ToArray();
@@ -863,7 +933,7 @@ public class BitcoinJob
         JobId = jobId;
 
         var coinbaseString = !string.IsNullOrEmpty(cc.PaymentProcessing?.CoinbaseString) ?
-            cc.PaymentProcessing?.CoinbaseString.Trim() : "Miningcore";
+            cc.PaymentProcessing?.CoinbaseString.Trim() : "F4pool";
 
         scriptSigFinalBytes = new Script(Op.GetPushOp(Encoding.UTF8.GetBytes(coinbaseString))).ToBytes();
 
@@ -957,17 +1027,44 @@ public class BitcoinJob
         };
     }
 
-    public object GetJobParams(bool isNew)
+    public object GetJobParams(bool isNew, uint? versionOverride = null)
     {
-        jobParams[^1] = isNew;
-        return jobParams;
+        // jobParams is shared between worker broadcasts. Stratum messages are
+        // serialized asynchronously, so never mutate the shared array here.
+        var result = (object[]) jobParams.Clone();
+
+        if(versionOverride.HasValue)
+            result[5] = versionOverride.Value.ToStringHex8();
+
+        result[^1] = isNew;
+        return result;
     }
 
     public virtual (Share Share, string BlockHex) ProcessShare(StratumConnection worker,
-        string extraNonce2, string nTime, string nonce, string versionBits = null)
+        string extraNonce2, string nTime, string nonce, string versionBits = null,
+        IReadOnlyList<double> assignedDifficulties = null)
+    {
+        return ProcessShare(worker, extraNonce2, nTime, nonce, versionBits, true,
+            assignedDifficulties);
+    }
+
+    internal virtual (Share Share, string BlockHex) ProcessShare(StratumConnection worker,
+        string extraNonce2, string nTime, string nonce, string versionBits, bool registerSubmit,
+        IReadOnlyList<double> assignedDifficulties = null)
     {
         Contract.RequiresNonNull(worker);
-        Contract.Requires<ArgumentException>(!string.IsNullOrEmpty(extraNonce2));
+
+        var isElektron =
+            string.Equals(coin?.Symbol, "ELEK", StringComparison.OrdinalIgnoreCase);
+
+        // Standard Bitcoin-family mining requires extranonce2.
+        // Elektron explicitly advertises extranonce2_size = 0, therefore
+        // an empty string is valid, but a missing/null parameter is not.
+        if(isElektron)
+            Contract.Requires<ArgumentException>(extraNonce2 != null);
+        else
+            Contract.Requires<ArgumentException>(!string.IsNullOrEmpty(extraNonce2));
+
         Contract.Requires<ArgumentException>(!string.IsNullOrEmpty(nTime));
         Contract.Requires<ArgumentException>(!string.IsNullOrEmpty(nonce));
 
@@ -978,7 +1075,15 @@ public class BitcoinJob
             throw new StratumException(StratumError.Other, "incorrect size of ntime");
 
         var nTimeInt = uint.Parse(nTime, NumberStyles.HexNumber);
-        if(nTimeInt < BlockTemplate.CurTime || nTimeInt > ((DateTimeOffset) clock.Now).ToUnixTimeSeconds() + 7200)
+        var isRadiant = string.Equals(coin?.CanonicalName, "Radiant", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(coin?.Symbol, "RXD", StringComparison.OrdinalIgnoreCase);
+
+        var useMinTime = (isRadiant || isElektron) && BlockTemplate.MinTime > 0;
+
+        var nTimeCompare = useMinTime ?
+            BlockTemplate.MinTime : BlockTemplate.CurTime;
+
+        if(nTimeInt < nTimeCompare || nTimeInt > ((DateTimeOffset) clock.Now).ToUnixTimeSeconds() + 7200)
             throw new StratumException(StratumError.Other, "ntime out of range");
 
         // validate nonce
@@ -999,11 +1104,34 @@ public class BitcoinJob
                 throw new StratumException(StratumError.Other, "rolling-version mask violation");
         }
 
-        // dupe check
-        if(!RegisterSubmit(context.ExtraNonce1, extraNonce2, nTime, nonce))
-            throw new StratumException(StratumError.DuplicateShare, "duplicate share");
+        // dupe check (deferred during RXD work-id recovery until a matching job is found)
+        //
+        // Standard Bitcoin-family jobs use extranonce1 as part of the real
+        // coinbase/header work. Elektron does not. For Elektron, use the
+        // worker-specific pool version instead so the duplicate key represents
+        // the header work actually sent to that miner.
+        var duplicateWorkId = context.ExtraNonce1;
 
-        return ProcessShareInternal(worker, extraNonce2, nTimeInt, nonceInt, versionBitsInt);
+        if(isElektron)
+        {
+            var baseVersion = GetBaseVersionForWorker(worker) ?? BlockTemplate.Version;
+            duplicateWorkId = baseVersion.ToStringHex8();
+        }
+
+        if(registerSubmit &&
+            !RegisterSubmit(duplicateWorkId, extraNonce2, nTime, nonce, versionBits))
+        {
+            throw new StratumException(StratumError.DuplicateShare, "duplicate share");
+        }
+
+        return ProcessShareInternal(worker, extraNonce2, nTimeInt, nonceInt,
+            versionBitsInt, assignedDifficulties);
+    }
+
+    internal bool RegisterRecoveredSubmit(StratumConnection worker, string extraNonce2, string nTime, string nonce)
+    {
+        var context = worker.ContextAs<BitcoinWorkerContext>();
+        return RegisterSubmit(context.ExtraNonce1, extraNonce2, nTime, nonce);
     }
 
     #endregion // API-Surface
